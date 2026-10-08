@@ -1,0 +1,6 @@
+bleak
+pynput
+cryptography
+pystray
+pillow
+pyinstaller
