@@ -28,7 +28,7 @@ Source: "dist\ClickBridge.exe"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\ClickBridge"; Filename: "{app}\ClickBridge.exe"
 
 [Run]
-Filename: "{app}\ClickBridge.exe"; Description: "Lancer ClickBridge"; Flags: postinstall nowait skipifsilent; Check: not RestartAfterUpdate
+Filename: "{app}\ClickBridge.exe"; Description: "Lancer ClickBridge"; Flags: postinstall nowait runasoriginaluser skipifsilent; Check: not RestartAfterUpdate
 
 [Code]
 function RestartAfterUpdate: Boolean;
@@ -46,6 +46,6 @@ var
   ResultCode: Integer;
 begin
   if (CurStep = ssPostInstall) and RestartAfterUpdate() then
-    Exec(ExpandConstant('{app}\ClickBridge.exe'), '', ExpandConstant('{app}'),
-         SW_SHOWNORMAL, ewNoWait, ResultCode);
+    ExecAsOriginalUser(ExpandConstant('{app}\ClickBridge.exe'), '', ExpandConstant('{app}'),
+                       SW_SHOWNORMAL, ewNoWait, ResultCode);
 end;

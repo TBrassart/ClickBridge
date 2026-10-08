@@ -3,7 +3,7 @@ rem Construit ZwiftClickClavier.exe (a lancer dans le dossier contenant zwift_cl
 python -m pip install --upgrade bleak pynput cryptography pystray pillow pyinstaller
 if errorlevel 1 goto erreur
 
-python -m PyInstaller --noconfirm --onefile --windowed --uac-admin ^
+python -m PyInstaller --noconfirm --onefile --windowed ^
   --name ClickBridge ^
   --icon logo.ico ^
   --add-data "logo.ico;." ^
@@ -16,7 +16,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --uac-admin ^
 if errorlevel 1 goto erreur
 
 echo.
-echo Termine : dist\ZwiftClickClavier.exe
+echo Termine : dist\ClickBridge.exe
 pause
 exit /b 0
 
