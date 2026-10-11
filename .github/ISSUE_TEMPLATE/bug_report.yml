@@ -1,0 +1,62 @@
+name: Signaler un problème
+description: Décrire un problème avec ClickBridge
+title: "[Problème] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Les tickets de ce dépôt sont publics. N’ajoute aucune donnée personnelle, mot de passe ou configuration privée. L’archive de diagnostic est facultative : vérifie-la avant de la joindre. Voir [Aide et diagnostic](https://github.com/TBrassart/ClickBridge/blob/main/SUPPORT.md).
+  - type: input
+    id: app-version
+    attributes:
+      label: Version de ClickBridge
+      description: Par exemple, v1.0.1.
+      placeholder: v1.0.1
+    validations:
+      required: true
+  - type: input
+    id: windows-version
+    attributes:
+      label: Version de Windows
+      description: Indique Windows 10 ou 11 et, si tu la connais, la version système.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Résultat attendu
+      placeholder: Ce que tu pensais voir se produire.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Résultat obtenu
+      description: Copie le texte exact du message d’erreur, le cas échéant.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Ouvrir ClickBridge…
+        2. Cliquer sur…
+        3. Observer…
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Diagnostic (facultatif)
+      description: Après vérification et anonymisation, glisse l’archive ZIP dans ce champ ou décris les informations pertinentes. Ne joins pas de configuration complète ni de trames brutes sans nécessité.
+      placeholder: Archive facultative — vérifie son contenu avant de la joindre.
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Vérification de confidentialité
+      options:
+        - label: J’ai vérifié le texte et les pièces jointes pour retirer les données personnelles ou sensibles.
+          required: true
