@@ -1,4 +1,4 @@
-![Alt text](relative%20images/Presentation.png?raw=true "Presentation")
+![Presentation de ClickBridge](relative%20images/Presentation.png?raw=true "Presentation")
 
 # ClickBridge
 
