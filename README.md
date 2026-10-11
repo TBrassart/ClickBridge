@@ -1,3 +1,5 @@
+![Alt text](relative%20images/Presentation.png?raw=true "Presentation")
+
 # ClickBridge
 
 ClickBridge relie un Zwift Click V1 à Windows et transforme ses boutons en actions configurables.
