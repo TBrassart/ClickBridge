@@ -44,8 +44,15 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
+  LaunchCommand: String;
 begin
   if (CurStep = ssPostInstall) and RestartAfterUpdate() then
-    ExecAsOriginalUser(ExpandConstant('{app}\ClickBridge.exe'), '', ExpandConstant('{app}'),
-                       SW_SHOWNORMAL, ewNoWait, ResultCode);
+  begin
+    { The updater may have launched this installer from a PyInstaller one-file
+      process. Clear its stale extraction path before starting the new app. }
+    LaunchCommand := '/D /C set "_MEIPASS2=" && set "PYINSTALLER_RESET_ENVIRONMENT=1" && start "" /B "' +
+                     ExpandConstant('{app}\ClickBridge.exe') + '"';
+    ExecAsOriginalUser(ExpandConstant('{sys}\cmd.exe'), LaunchCommand,
+                       ExpandConstant('{app}'), SW_HIDE, ewNoWait, ResultCode);
+  end;
 end;
