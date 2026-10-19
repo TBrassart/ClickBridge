@@ -575,7 +575,7 @@ class App:
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
         window_width = min(500, max(390, screen_width - 24))
-        window_height = min(720, max(620, screen_height - 80))
+        window_height = min(740, max(620, screen_height - 60))
         root.geometry(f"{window_width}x{window_height}")
         root.minsize(min(390, window_width), min(640, window_height))
         style = ttk.Style(root)
@@ -629,7 +629,7 @@ class App:
         tk.Label(header, text="Click Bridge", bg=self.colors["bg"], fg=self.colors["text"],
                  font=("Segoe UI", 18, "bold")).pack(side="left")
 
-        hero = tk.Frame(main, bg=self.colors["card"], padx=12, pady=10)
+        hero = tk.Frame(main, bg=self.colors["card"], padx=12, pady=7)
         hero.pack(fill="x", pady=(8, 8))
         status_row = tk.Frame(hero, bg=self.colors["card"])
         status_row.pack()
@@ -698,7 +698,7 @@ class App:
                  bg=self.colors["card"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), wraplength=390, justify="center").pack()
         ride_sides = tk.Frame(self.ride_panel, bg=self.colors["card"])
-        ride_sides.pack(fill="x", pady=(4, 0))
+        ride_sides.pack(fill="x", pady=(2, 0))
         self.ride_side_panels = {}
         self.ride_button_frames = {}
         self.ride_device_status_labels = {}
@@ -715,7 +715,7 @@ class App:
         self.click_button_states = {"plus": False, "minus": False}
         self.ride_battery_alerted = {"left": False, "right": False}
         for column, side in enumerate(("left", "right")):
-            side_panel = tk.Frame(ride_sides, bg=self.colors["card2"], padx=8, pady=6)
+            side_panel = tk.Frame(ride_sides, bg=self.colors["card2"], padx=6, pady=3)
             side_panel.grid(row=0, column=column, sticky="nsew",
                             padx=(0, 4) if column == 0 else (4, 0))
             ride_sides.columnconfigure(column, weight=1)
@@ -736,7 +736,7 @@ class App:
                 fg=self.colors["muted"], font=("Segoe UI", 8))
             self.ride_paddle_labels[side].pack()
             button_frame = tk.Frame(side_panel, bg=self.colors["card2"])
-            button_frame.pack(pady=(4, 0))
+            button_frame.pack(pady=(2, 0))
             self.ride_button_frames[side] = button_frame
             self.ride_button_labels[side] = {}
             self.render_ride_buttons(side)
@@ -784,10 +784,10 @@ class App:
                   bg=self.colors["card"], fg=self.colors["accent"], activebackground=self.colors["card"],
                   font=("Segoe UI", 9, "underline")).pack(side="right")
         self.stat_values = {}
-        stat_rows = (("duration", "Durée", 1, 0), ("changes", "Changements", 2, 0),
-                     ("plus", "+ Click", 3, 0), ("minus", "− Click", 3, 2),
-                     ("ride", "Appuis Ride", 4, 0),
-                     ("average", "Moyenne", 1, 2))
+        stat_rows = (("duration", "Durée", 1, 0), ("changes", "Changements", 1, 2),
+                     ("plus", "+ Click", 2, 0), ("minus", "− Click", 2, 2),
+                     ("ride", "Appuis Ride", 3, 0),
+                     ("average", "Moyenne", 3, 2))
         for key, label, row, column in stat_rows:
             tk.Label(stats, text=label, bg=self.colors["card"], fg=self.colors["muted"],
                      font=("Segoe UI", 9)).grid(row=row, column=column, sticky="w", pady=1)
@@ -1649,11 +1649,11 @@ class App:
         for name, row, column, caption in layouts[side]:
             active = self.ride_button_values.get((side, name), False)
             label = tk.Label(
-                frame, text=caption, padx=6, pady=4,
+                frame, text=caption, padx=4, pady=2,
                 bg=self.COLORS["green"] if active else self.colors["card"],
                 fg=self.colors["bg"] if active else self.colors["text"],
                 font=("Segoe UI", 9, "bold"))
-            label.grid(row=row, column=column, padx=4, pady=3, sticky="nsew")
+            label.grid(row=row, column=column, padx=2, pady=1, sticky="nsew")
             self.ride_button_labels[side][name] = label
 
     def select_device(self, _event=None):
@@ -1661,6 +1661,7 @@ class App:
         self.click_panel.pack_forget()
         self.ride_panel.pack_forget()
         if self.selected_device == "Zwift Click V1":
+            self.status_detail.pack(before=self.device_panel, pady=(2, 4))
             for which, active in self.click_button_states.items():
                 if active:
                     button = self.plus_button if which == "plus" else self.minus_button
@@ -1668,6 +1669,7 @@ class App:
                     button.configure(bg=color, fg=self.colors["bg"])
             self.click_panel.pack(fill="x")
             return
+        self.status_detail.pack_forget()
         for button in (self.plus_button, self.minus_button):
             button.configure(bg=self.colors["card2"], fg=self.colors["text"])
         for side in ("left", "right"):
