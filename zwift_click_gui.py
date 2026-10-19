@@ -426,6 +426,8 @@ class Worker:
             which = "plus" if event.type == EventType.PLUS_DOWN else "minus"
             self.emit("button", which)
             logger.info("BUTTON_%s", which.upper())
+        elif event.type in (EventType.PLUS_UP, EventType.MINUS_UP):
+            self.emit("ride_release", "plus" if event.type == EventType.PLUS_UP else "minus")
         elif event.type in RIDE_BUTTON_EVENTS:
             side, name, pressed, _action_key = RIDE_BUTTON_EVENTS[event.type]
             self.emit("ride_button", side, name, pressed)
@@ -598,6 +600,17 @@ class App:
         self.session_saved = False
         self.history_window = None
         self.tray_icon = None
+        self.selected_device = "Zwift Click V1"
+        self.device_panel = None
+        self.click_button_states = {"plus": False, "minus": False}
+        self.ride_button_values = {}
+        self.ride_device_statuses = {
+            "left": ("Recherche Bluetooth…", "orange"),
+            "right": ("Recherche Bluetooth…", "orange"),
+        }
+        self.ride_battery_values = {"left": None, "right": None}
+        self.ride_paddle_values = {"left": None, "right": None}
+        self.ride_battery_alerted = {"left": False, "right": False}
         self.current_status_color = "orange"
         self.current_status_text = "Recherche des périphériques Zwift…"
         self.last_poll_at = time.time()
@@ -633,87 +646,89 @@ class App:
         self.status_detail = tk.Label(hero, text="Recherche des périphériques Zwift…", bg=self.colors["card"],
                                       fg=self.colors["muted"], font=("Segoe UI", 9), wraplength=340)
         self.status_detail.pack(pady=(2, 4))
-        tk.Label(hero, text="Zwift Click V1", bg=self.colors["card"], fg=self.colors["text"],
-                 font=("Segoe UI", 14, "bold")).pack(pady=(4, 1))
-        self.click_device_status = tk.Label(hero, text="Recherche Bluetooth…",
+        selector_row = tk.Frame(hero, bg=self.colors["card"])
+        selector_row.pack(fill="x", pady=(4, 0))
+        tk.Label(selector_row, text="Équipement", bg=self.colors["card"],
+                 fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="left")
+        self.device_selector_var = tk.StringVar(value=self.selected_device)
+        self.device_selector = ttk.Combobox(
+            selector_row, textvariable=self.device_selector_var,
+            values=("Zwift Click V1", "Zwift Ride — gauche", "Zwift Ride — droite"),
+            state="readonly", width=24, style="Dark.TCombobox")
+        self.device_selector.pack(side="right")
+        self.device_selector.bind("<<ComboboxSelected>>", self.select_device)
+
+        self.device_panel = tk.Frame(hero, bg=self.colors["card"])
+        self.device_panel.pack(fill="x", pady=(7, 0))
+        self.click_panel = tk.Frame(self.device_panel, bg=self.colors["card"])
+        tk.Label(self.click_panel, text="Zwift Click V1", bg=self.colors["card"],
+                 fg=self.colors["text"], font=("Segoe UI", 14, "bold")).pack(pady=(2, 1))
+        self.click_device_status = tk.Label(self.click_panel, text="Recherche Bluetooth…",
                                             bg=self.colors["card"], fg=self.colors["muted"],
                                             font=("Segoe UI", 9))
         self.click_device_status.pack()
-        self.battery = tk.Label(hero, text="Batterie Click : –", bg=self.colors["card"],
-                                fg=self.colors["muted"], font=("Segoe UI", 10))
+        self.battery = tk.Label(self.click_panel, text="Batterie Click : –",
+                                bg=self.colors["card"], fg=self.colors["muted"],
+                                font=("Segoe UI", 10))
         self.battery.pack()
-
-        buttons = tk.Frame(hero, bg=self.colors["card"])
-        buttons.pack(pady=(8, 6))
-        self.plus_button = tk.Button(buttons, text="+", width=7, height=1, relief="flat",
+        click_buttons = tk.Frame(self.click_panel, bg=self.colors["card"])
+        click_buttons.pack(pady=(8, 6))
+        self.plus_button = tk.Button(click_buttons, text="+", width=7, height=1, relief="flat",
                                      bg=self.colors["card2"], fg=self.colors["text"],
                                      activebackground=self.colors["accent"],
                                      activeforeground=self.colors["bg"],
                                      disabledforeground=self.colors["text"],
                                      font=("Segoe UI", 17, "bold"), state="disabled")
         self.plus_button.pack(side="left", padx=18)
-        self.minus_button = tk.Button(buttons, text="−", width=7, height=1, relief="flat",
+        self.minus_button = tk.Button(click_buttons, text="−", width=7, height=1, relief="flat",
                                       bg=self.colors["card2"], fg=self.colors["text"],
                                       activebackground=self.colors["accent"],
                                       activeforeground=self.colors["bg"],
                                       disabledforeground=self.colors["text"],
                                       font=("Segoe UI", 17, "bold"), state="disabled")
         self.minus_button.pack(side="left", padx=18)
-        self.last = tk.Label(hero, text="Dernière action : –", bg=self.colors["card"],
-                             fg=self.colors["muted"], font=("Segoe UI", 10))
-        self.last.pack(pady=(0, 0))
+        self.last = tk.Label(self.click_panel, text="Dernière action : –",
+                             bg=self.colors["card"], fg=self.colors["muted"],
+                             font=("Segoe UI", 10))
+        self.last.pack()
 
-        ride_card = tk.Frame(main, bg=self.colors["card"], padx=10, pady=7)
-        ride_card.pack(fill="x", pady=(0, 7))
-        tk.Label(ride_card, text="Zwift Ride", bg=self.colors["card"], fg=self.colors["text"],
-                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
-        tk.Label(ride_card,
-                 text="Intégration expérimentale — protocole observé sur firmware 1.1.0, matériel à valider",
+        self.ride_panel = tk.Frame(self.device_panel, bg=self.colors["card"])
+        self.ride_title = tk.Label(self.ride_panel, text="Zwift Ride — gauche",
+                                   bg=self.colors["card"], fg=self.colors["text"],
+                                   font=("Segoe UI", 14, "bold"))
+        self.ride_title.pack(pady=(2, 1))
+        tk.Label(self.ride_panel,
+                 text="Intégration expérimentale — protocole observé sur firmware 1.1.0",
                  bg=self.colors["card"], fg=self.colors["muted"],
-                 font=("Segoe UI", 8), wraplength=390, justify="left").pack(anchor="w", pady=(0, 5))
-        ride_sides = tk.Frame(ride_card, bg=self.colors["card"])
-        ride_sides.pack(fill="x")
-        self.ride_status_labels = {}
-        self.ride_battery_labels = {}
-        self.ride_button_labels = {}
-        self.ride_paddle_labels = {}
-        ride_layouts = {
-            "left": (("UP", 0, 1, "↑"), ("LEFT", 1, 0, "←"),
-                     ("RIGHT", 1, 2, "→"), ("DOWN", 2, 1, "↓"),
-                     ("SHIFT_UP_L", 3, 0, "L+"),
-                     ("SHIFT_DN_L", 3, 1, "L−")),
-            "right": (("A", 0, 0, "A"), ("B", 0, 1, "B"),
-                      ("Y", 1, 0, "Y"), ("Z", 1, 1, "Z"),
-                      ("SHIFT_UP_R", 2, 0, "L+"),
-                      ("SHIFT_DN_R", 2, 1, "L−")),
-        }
-        for column, side in enumerate(("left", "right")):
-            side_card = tk.Frame(ride_sides, bg=self.colors["card2"], padx=7, pady=5)
-            side_card.grid(row=0, column=column, sticky="nsew",
-                           padx=(0, 4) if column == 0 else (4, 0))
-            ride_sides.columnconfigure(column, weight=1)
-            side_label = "gauche" if side == "left" else "droite"
-            tk.Label(side_card, text=f"Unité {side_label}", bg=self.colors["card2"],
-                     fg=self.colors["text"], font=("Segoe UI", 9, "bold")).grid(
-                         row=0, column=0, columnspan=3, sticky="w")
-            self.ride_status_labels[side] = tk.Label(
-                side_card, text="Recherche…", bg=self.colors["card2"],
-                fg=self.colors["muted"], font=("Segoe UI", 8))
-            self.ride_status_labels[side].grid(row=1, column=0, columnspan=3, sticky="w")
-            self.ride_battery_labels[side] = tk.Label(
-                side_card, text="Batterie : –", bg=self.colors["card2"],
-                fg=self.colors["muted"], font=("Segoe UI", 8))
-            self.ride_battery_labels[side].grid(row=2, column=0, columnspan=3, sticky="w")
-            for name, row, col, label in ride_layouts[side]:
-                key_label = tk.Label(side_card, text=label, width=5, padx=2, pady=2,
+                 font=("Segoe UI", 8), wraplength=390, justify="center").pack()
+        self.ride_device_status = tk.Label(self.ride_panel, text="Recherche Bluetooth…",
+                                           bg=self.colors["card"], fg=self.colors["muted"],
+                                           font=("Segoe UI", 9))
+        self.ride_device_status.pack()
+        self.ride_battery = tk.Label(self.ride_panel, text="Batterie : –",
                                      bg=self.colors["card"], fg=self.colors["muted"],
-                                     font=("Segoe UI", 8, "bold"))
-                key_label.grid(row=row + 3, column=col, padx=2, pady=2, sticky="ew")
-                self.ride_button_labels[(side, name)] = key_label
-            self.ride_paddle_labels[side] = tk.Label(
-                side_card, text="Paddle analogique : –", bg=self.colors["card2"],
-                fg=self.colors["muted"], font=("Segoe UI", 8))
-            self.ride_paddle_labels[side].grid(row=7, column=0, columnspan=3, sticky="w")
+                                     font=("Segoe UI", 10))
+        self.ride_battery.pack()
+        self.ride_paddle = tk.Label(self.ride_panel, text="Paddle analogique : –",
+                                    bg=self.colors["card"], fg=self.colors["muted"],
+                                    font=("Segoe UI", 9))
+        self.ride_paddle.pack(pady=(2, 1))
+        ride_buttons = tk.Frame(self.ride_panel, bg=self.colors["card"])
+        ride_buttons.pack(pady=(5, 4))
+        self.ride_button_labels = {}
+        self.ride_buttons = ride_buttons
+        self.ride_battery_alerted = {"left": False, "right": False}
+        self.ride_device_statuses = {
+            "left": ("Recherche Bluetooth…", "orange"),
+            "right": ("Recherche Bluetooth…", "orange"),
+        }
+        self.ride_battery_values = {"left": None, "right": None}
+        self.ride_paddle_values = {"left": None, "right": None}
+        self.ride_button_values = {}
+        self.click_button_states = {"plus": False, "minus": False}
+        self.ride_battery_alerted = {"left": False, "right": False}
+        self.render_ride_buttons("left")
+        self.click_panel.pack(fill="x")
 
         profile_card = tk.Frame(main, bg=self.colors["card"], padx=10, pady=6)
         profile_card.pack(fill="x", pady=(0, 7))
@@ -1206,7 +1221,16 @@ class App:
                 default=messagebox.NO, parent=self.config_window):
             return
         try:
-            subprocess.Popen([path, "/RESTARTAPP"], cwd=os.path.dirname(path), close_fds=True)
+            if os.name == "nt":
+                result = ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", path, "/RESTARTAPP", os.path.dirname(path), 1)
+                if result <= 32:
+                    raise OSError(f"Windows n’a pas pu démarrer l’installateur (code {result}).")
+            else:
+                subprocess.Popen([path, "/RESTARTAPP"], cwd=os.path.dirname(path),
+                                 close_fds=True)
+        except PermissionError:
+            return
         except OSError as exc:
             messagebox.showerror("Lancement impossible", str(exc), parent=self.config_window)
             return
@@ -1557,22 +1581,83 @@ class App:
             logger.warning("Could not save session history: %s", exc)
 
     def register_button(self, which):
+        self.click_button_states[which] = True
         self.change_counts[which] += 1
         button = self.plus_button if which == "plus" else self.minus_button
         color = self.COLORS["green"] if which == "plus" else self.COLORS["orange"]
         button.config(bg=color, fg=self.colors["bg"])
-        button.after(180, lambda: button.config(bg=self.colors["card2"], fg=self.colors["text"]))
+        button.after(180, lambda: self.reset_click_button(which))
         self.update_session_stats()
 
+    def release_button(self, which):
+        self.click_button_states[which] = False
+        if self.selected_device == "Zwift Click V1":
+            self.reset_click_button(which)
+
+    def reset_click_button(self, which):
+        self.click_button_states[which] = False
+        button = self.plus_button if which == "plus" else self.minus_button
+        button.config(bg=self.colors["card2"], fg=self.colors["text"])
+
     def register_ride_button(self, side, name, pressed):
-        label = self.ride_button_labels.get((side, name))
-        if label is None:
-            return
-        label.configure(bg=self.COLORS["green"] if pressed else self.colors["card"],
-                        fg=self.colors["bg"] if pressed else self.colors["muted"])
+        self.ride_button_values[(side, name)] = pressed
+        selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
+        if self.selected_device.startswith("Zwift Ride") and selected_side == side:
+            self.render_ride_buttons(side)
         if pressed:
             self.change_counts["ride"] += 1
             self.update_session_stats()
+
+    def render_ride_buttons(self, side):
+        for child in self.ride_buttons.winfo_children():
+            child.destroy()
+        layouts = {
+            "left": (("UP", 0, 1, "↑"), ("LEFT", 1, 0, "←"),
+                     ("RIGHT", 1, 2, "→"), ("DOWN", 2, 1, "↓"),
+                     ("SHIFT_UP_L", 3, 0, "Levier +"),
+                     ("SHIFT_DN_L", 3, 1, "Levier −")),
+            "right": (("A", 0, 0, "A"), ("B", 0, 1, "B"),
+                      ("Y", 1, 0, "Y"), ("Z", 1, 1, "Z"),
+                      ("SHIFT_UP_R", 2, 0, "Levier +"),
+                      ("SHIFT_DN_R", 2, 1, "Levier −")),
+        }
+        for name, row, column, caption in layouts[side]:
+            active = self.ride_button_values.get((side, name), False)
+            label = tk.Label(
+                self.ride_buttons, text=caption, padx=9, pady=5,
+                bg=self.COLORS["green"] if active else self.colors["card2"],
+                fg=self.colors["bg"] if active else self.colors["text"],
+                font=("Segoe UI", 10, "bold"))
+            label.grid(row=row, column=column, padx=4, pady=3, sticky="nsew")
+            self.ride_button_labels[(side, name)] = label
+
+    def select_device(self, _event=None):
+        self.selected_device = self.device_selector_var.get()
+        self.click_panel.pack_forget()
+        self.ride_panel.pack_forget()
+        if self.selected_device == "Zwift Click V1":
+            for which, active in self.click_button_states.items():
+                if active:
+                    button = self.plus_button if which == "plus" else self.minus_button
+                    color = self.COLORS["green"] if which == "plus" else self.COLORS["orange"]
+                    button.configure(bg=color, fg=self.colors["bg"])
+            self.click_panel.pack(fill="x")
+            return
+        for button in (self.plus_button, self.minus_button):
+            button.configure(bg=self.colors["card2"], fg=self.colors["text"])
+        side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
+        self.ride_title.configure(text=f"Zwift Ride — {'gauche' if side == 'left' else 'droite'}")
+        status_text, color = self.ride_device_statuses[side]
+        self.ride_device_status.configure(
+            text=status_text, fg=self.COLORS.get(color, self.colors["muted"]))
+        battery = self.ride_battery_values[side]
+        self._render_ride_battery(side, battery)
+        paddle = self.ride_paddle_values[side]
+        self.ride_paddle.configure(
+            text=f"Paddle analogique : {paddle}/200" if paddle is not None
+            else "Paddle analogique : –")
+        self.render_ride_buttons(side)
+        self.ride_panel.pack(fill="x")
 
     def start_worker(self):
         if self.is_active:
@@ -1609,16 +1694,28 @@ class App:
 
     def set_device_status(self, key, text, color):
         if key == "click":
-            label = self.click_device_status
+            self.click_device_status.configure(
+                text=text, fg=self.COLORS.get(color, self.colors["muted"]))
+            return
         elif key in ("ride_left", "ride_right"):
             side = key.split("_", 1)[1]
-            label = self.ride_status_labels[side]
+            self.ride_device_statuses[side] = (text, color)
+            selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
+            if self.selected_device.startswith("Zwift Ride") and selected_side == side:
+                self.ride_device_status.configure(
+                    text=text, fg=self.COLORS.get(color, self.colors["muted"]))
+            return
         else:
             return
-        label.configure(text=text, fg=self.COLORS.get(color, self.colors["muted"]))
 
     def show_ride_battery(self, side, pct):
-        label = self.ride_battery_labels[side]
+        self.ride_battery_values[side] = pct
+        selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
+        if self.selected_device.startswith("Zwift Ride") and selected_side == side:
+            self._render_ride_battery(side, pct)
+
+    def _render_ride_battery(self, side, pct):
+        label = self.ride_battery
         if pct is None:
             label.configure(text="Batterie : –", fg=self.colors["muted"])
             self.ride_battery_alerted[side] = False
@@ -1707,13 +1804,18 @@ class App:
                     self.last.config(text=f"Dernière action : {args[0]}")
                 elif kind == "button":
                     self.register_button(args[0])
+                elif kind == "ride_release":
+                    self.release_button(args[0])
                 elif kind == "ride_button":
                     self.register_ride_button(*args)
                 elif kind == "ride_paddle":
                     side, value = args
-                    label = (f"Paddle analogique : {value}/200" if value is not None
-                             else "Paddle analogique : –")
-                    self.ride_paddle_labels[side].configure(text=label)
+                    self.ride_paddle_values[side] = value
+                    selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
+                    if self.selected_device.startswith("Zwift Ride") and selected_side == side:
+                        self.ride_paddle.configure(
+                            text=f"Paddle analogique : {value}/200" if value is not None
+                            else "Paddle analogique : –")
                 elif kind == "profile":
                     self.current_profile_name = args[0]
                     self.profile_status.config(text=f"Profil effectif : {args[0]}")
