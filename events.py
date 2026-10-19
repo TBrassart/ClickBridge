@@ -17,6 +17,32 @@ class EventType(str, Enum):
     MINUS_DOUBLE = "MINUS_DOUBLE"
     COMBINATION = "COMBINATION"
     SEQUENCE = "SEQUENCE"
+    # Zwift Ride : transitions distinctes pour les deux unités et leurs boutons.
+    RIDE_LEFT_DOWN = "RIDE_LEFT_DOWN"
+    RIDE_LEFT_UP = "RIDE_LEFT_UP"
+    RIDE_UP_DOWN = "RIDE_UP_DOWN"
+    RIDE_UP_UP = "RIDE_UP_UP"
+    RIDE_RIGHT_DOWN = "RIDE_RIGHT_DOWN"
+    RIDE_RIGHT_UP = "RIDE_RIGHT_UP"
+    RIDE_DOWN_DOWN = "RIDE_DOWN_DOWN"
+    RIDE_DOWN_UP = "RIDE_DOWN_UP"
+    RIDE_A_DOWN = "RIDE_A_DOWN"
+    RIDE_A_UP = "RIDE_A_UP"
+    RIDE_B_DOWN = "RIDE_B_DOWN"
+    RIDE_B_UP = "RIDE_B_UP"
+    RIDE_Y_DOWN = "RIDE_Y_DOWN"
+    RIDE_Y_UP = "RIDE_Y_UP"
+    RIDE_Z_DOWN = "RIDE_Z_DOWN"
+    RIDE_Z_UP = "RIDE_Z_UP"
+    RIDE_SHIFT_UP_L_DOWN = "RIDE_SHIFT_UP_L_DOWN"
+    RIDE_SHIFT_UP_L_UP = "RIDE_SHIFT_UP_L_UP"
+    RIDE_SHIFT_DN_L_DOWN = "RIDE_SHIFT_DN_L_DOWN"
+    RIDE_SHIFT_DN_L_UP = "RIDE_SHIFT_DN_L_UP"
+    RIDE_SHIFT_UP_R_DOWN = "RIDE_SHIFT_UP_R_DOWN"
+    RIDE_SHIFT_UP_R_UP = "RIDE_SHIFT_UP_R_UP"
+    RIDE_SHIFT_DN_R_DOWN = "RIDE_SHIFT_DN_R_DOWN"
+    RIDE_SHIFT_DN_R_UP = "RIDE_SHIFT_DN_R_UP"
+    RIDE_PADDLE = "RIDE_PADDLE"
 
 
 @dataclass(frozen=True)
@@ -28,6 +54,7 @@ class DeviceEvent:
     buttons: tuple = ()
     sequence: tuple = ()
     device_id: str = ""
+    value: int | None = None
 
     def __post_init__(self):
         if self.timestamp == 0.0:

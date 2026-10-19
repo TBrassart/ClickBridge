@@ -19,6 +19,8 @@ L’archive contient normalement :
 - `application.log` et `errors.log` : les journaux récents et les avertissements ou erreurs ;
 - `device-info.json` et `compatibility.json` : informations du périphérique et compatibilité.
 
+Pour le Zwift Ride, l’archive décrit séparément les unités gauche et droite. La prise en charge actuelle est expérimentale et basée sur l’analyse du firmware 1.1.0 ; un diagnostic peut aider à distinguer un problème de découverte d’un problème de connexion ou de protocole.
+
 La configuration complète n’est pas ajoutée par défaut. Avec l’anonymisation activée, ClickBridge masque notamment les adresses Bluetooth, l’identifiant du périphérique, les noms des profils et les noms d’utilisateur dans les chemins Windows. Cette anonymisation ne garantit pas la détection de toute donnée personnelle pouvant apparaître dans un texte de journal.
 
 Les trames Bluetooth brutes peuvent révéler des détails techniques propres à ton appareil. La capture du protocole est désactivée par défaut et limitée à la session ; l’archive ne les inclut que si tu as activé cette capture et choisi de les inclure à l’export.

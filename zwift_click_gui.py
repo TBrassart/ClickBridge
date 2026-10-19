@@ -14,7 +14,7 @@ import tkinter as tk
 import webbrowser
 from tkinter import ttk, messagebox, filedialog
 from events import DeviceEvent, EventEngine, EventType
-from devices import ClickV1Driver, DeviceManager
+from devices import ClickV1Driver, DeviceManager, ZwiftRideDriver
 from diagnostics import export_diagnostic_zip
 from config_store import (CURRENT_CONFIG_VERSION, ConfigError, backup_config_file,
                           load_config_file, migrate_config_data, restore_config_file,
@@ -55,6 +55,38 @@ _mutex = None   # garde la référence du mutex d'instance unique
 logger = logging.getLogger("clickbridge")
 CONFIG_WRITE_BLOCKED = False
 CONFIG_LOAD_ERROR = None
+
+RIDE_BUTTON_EVENTS = {
+    EventType.RIDE_LEFT_DOWN: ("left", "LEFT", True, "ride_left"),
+    EventType.RIDE_LEFT_UP: ("left", "LEFT", False, "ride_left"),
+    EventType.RIDE_UP_DOWN: ("left", "UP", True, "ride_up"),
+    EventType.RIDE_UP_UP: ("left", "UP", False, "ride_up"),
+    EventType.RIDE_RIGHT_DOWN: ("left", "RIGHT", True, "ride_right"),
+    EventType.RIDE_RIGHT_UP: ("left", "RIGHT", False, "ride_right"),
+    EventType.RIDE_DOWN_DOWN: ("left", "DOWN", True, "ride_down"),
+    EventType.RIDE_DOWN_UP: ("left", "DOWN", False, "ride_down"),
+    EventType.RIDE_A_DOWN: ("right", "A", True, "ride_a"),
+    EventType.RIDE_A_UP: ("right", "A", False, "ride_a"),
+    EventType.RIDE_B_DOWN: ("right", "B", True, "ride_b"),
+    EventType.RIDE_B_UP: ("right", "B", False, "ride_b"),
+    EventType.RIDE_Y_DOWN: ("right", "Y", True, "ride_y"),
+    EventType.RIDE_Y_UP: ("right", "Y", False, "ride_y"),
+    EventType.RIDE_Z_DOWN: ("right", "Z", True, "ride_z"),
+    EventType.RIDE_Z_UP: ("right", "Z", False, "ride_z"),
+    EventType.RIDE_SHIFT_UP_L_DOWN: ("left", "SHIFT_UP_L", True, "ride_shift_up_l"),
+    EventType.RIDE_SHIFT_UP_L_UP: ("left", "SHIFT_UP_L", False, "ride_shift_up_l"),
+    EventType.RIDE_SHIFT_DN_L_DOWN: ("left", "SHIFT_DN_L", True, "ride_shift_dn_l"),
+    EventType.RIDE_SHIFT_DN_L_UP: ("left", "SHIFT_DN_L", False, "ride_shift_dn_l"),
+    EventType.RIDE_SHIFT_UP_R_DOWN: ("right", "SHIFT_UP_R", True, "ride_shift_up_r"),
+    EventType.RIDE_SHIFT_UP_R_UP: ("right", "SHIFT_UP_R", False, "ride_shift_up_r"),
+    EventType.RIDE_SHIFT_DN_R_DOWN: ("right", "SHIFT_DN_R", True, "ride_shift_dn_r"),
+    EventType.RIDE_SHIFT_DN_R_UP: ("right", "SHIFT_DN_R", False, "ride_shift_dn_r"),
+}
+RIDE_PROFILE_ACTIONS = {
+    event_type: metadata[3]
+    for event_type, metadata in RIDE_BUTTON_EVENTS.items()
+    if metadata[2]
+}
 
 
 def configure_logging():
@@ -174,18 +206,18 @@ def explain(e):
     msg = str(e) or e.__class__.__name__
     low = msg.lower()
     if isinstance(e, (asyncio.TimeoutError, TimeoutError)) or "timeout" in low or "timed out" in low:
-        return ("Le Click n'a pas répondu à temps. Réveille-le (appui sur un bouton) "
-                "et rapproche-le du PC.", "orange")
+        return ("Le périphérique Zwift n'a pas répondu à temps. Réveille-le et rapproche-le du PC.",
+                "orange")
     if "denied" in low:
-        return ("Accès refusé : le Click est sans doute déjà connecté à une autre "
-                "application (Zwift, Companion, téléphone) ou à Windows. Ferme-les, "
-                "puis réveille le Click.", "red")
+        return ("Accès Bluetooth refusé : le périphérique est peut-être déjà connecté à "
+                "Zwift, Companion, une autre application ou Windows. Ferme cette connexion "
+                "puis réessaie.", "red")
     if any(w in low for w in ("adapter", "radio", "not available", "turned off",
                               "powered off", "bluetooth")):
         return ("Bluetooth indisponible : vérifie que le Bluetooth est activé dans "
                 "Windows (mode avion désactivé) et qu'un adaptateur est présent.", "red")
     if any(w in low for w in ("disconnect", "not connected", "unreachable")):
-        return ("Connexion perdue avec le Click. Réveille-le et patiente quelques secondes.",
+        return ("Connexion Bluetooth perdue. Réveille le périphérique et patiente quelques secondes.",
                 "orange")
     return (f"Erreur inattendue : {msg}", "red")
 
@@ -204,16 +236,38 @@ class Worker:
         self.last_error = None
         self.not_found = 0
         self.search_logged = False
-        self.last_battery = None
+        self.last_battery = {}
         self.event_engine = EventEngine()
         self.last_profile_name = None
-        self.driver = ClickV1Driver(
+        self.device_states = {
+            "click": ("En attente de recherche", "orange"),
+            "ride_left": ("En attente de recherche", "orange"),
+            "ride_right": ("En attente de recherche", "orange"),
+        }
+        self.click_driver = ClickV1Driver(
             verbose=lambda: self.shared["verbose"],
-            status=lambda *args: self.emit("status", *args),
+            status=lambda text, color: self.on_device_status("click", text, color),
             battery=self.on_battery, log=self.on_driver_log,
             diagnostic=lambda *args: self.emit("diagnostic", *args),
             tick=lambda: self.publish_events(self.event_engine.advance()))
-        self.device_manager = DeviceManager([self.driver])
+        self.ride_drivers = {
+            side: ZwiftRideDriver(
+                side,
+                verbose=lambda: self.shared["verbose"],
+                status=lambda text, color, side=side: self.on_device_status(
+                    f"ride_{side}", text, color),
+                battery=lambda value, side=side: self.on_ride_battery(side, value),
+                log=self.on_driver_log,
+                diagnostic=lambda *args: self.emit("diagnostic", *args),
+                tick=lambda: self.publish_events(self.event_engine.advance()))
+            for side in ("left", "right")
+        }
+        self.drivers = {"click": self.click_driver,
+                        "ride_left": self.ride_drivers["left"],
+                        "ride_right": self.ride_drivers["right"]}
+        # Compatibilité pour les appels existants ; l'export utilise maintenant tous les pilotes.
+        self.driver = self.click_driver
+        self.device_manager = DeviceManager(list(self.drivers.values()))
 
     def emit(self, *msg):
         self.q.put(msg)
@@ -224,6 +278,36 @@ class Worker:
             self.last_error = msg
             self.emit("log", msg)
             logger.warning("%s%s", msg, f" ({detail})" if detail else "")
+
+    def on_scan_error(self, error):
+        message, _color = explain(error)
+        self.report(message, repr(error))
+
+    def on_device_status(self, key, text, color):
+        self.device_states[key] = (text, color)
+        self.emit("device_status", key, text, color)
+        if color != "green":
+            self.emit("battery" if key == "click" else "device_battery",
+                      *(() if key == "click" else (key,)), None)
+        connected = [name for name, (_detail, state) in self.device_states.items()
+                     if state == "green"]
+        if connected:
+            labels = {"click": "Click V1", "ride_left": "Ride gauche",
+                      "ride_right": "Ride droite"}
+            overall, overall_color = "Connecté : " + ", ".join(
+                labels.get(name, name) for name in connected), "green"
+        elif color == "red" or any(state == "red" for _detail, state in self.device_states.values()):
+            overall, overall_color = "Connexion d'un périphérique en erreur", "red"
+        else:
+            overall, overall_color = "Recherche des périphériques Zwift…", "orange"
+        labels = {"click": "Click V1", "ride_left": "Ride gauche",
+                  "ride_right": "Ride droite"}
+        details = " · ".join(
+            f"{labels.get(name, name)} : {detail}"
+            for name, (detail, state) in self.device_states.items()
+            if state in ("red", "orange"))
+        self.emit("status", overall, overall_color)
+        self.emit("status_detail", details)
 
     # ---------- cycle de vie ----------
     def start(self):
@@ -245,6 +329,10 @@ class Worker:
             loop.close()
             self.emit("status", "Arrêté", "gray")
             self.emit("battery", None)
+            for key in self.device_states:
+                self.emit("device_status", key, "Arrêté", "gray")
+                if key.startswith("ride_"):
+                    self.emit("device_battery", key, None)
 
     def stop(self):
         self.stop_requested = True
@@ -268,7 +356,7 @@ class Worker:
                     session_task.cancel()
                     await asyncio.gather(session_task, return_exceptions=True)
                     self.reconnect_event.clear()
-                    self.emit("status", "Reprise de Windows : nouvelle recherche du Click…", "orange")
+                    self.emit("status", "Reprise de Windows : nouvelle recherche des périphériques…", "orange")
                     logger.info("Windows resume detected; restarting device discovery")
                     continue
                 reconnect_task.cancel()
@@ -290,51 +378,62 @@ class Worker:
             await asyncio.sleep(2)
 
     async def session(self):
-        self.emit("status", "Recherche du Click… appuie sur un bouton (LED bleue)", "orange")
+        self.emit("status", "Recherche des périphériques Zwift…", "orange")
         self.emit("battery", None)
         if not self.search_logged:
-            logger.info("Searching for Zwift Click")
+            logger.info("Searching for Zwift devices")
             self.search_logged = True
+        for key in self.device_states:
+            self.on_device_status(key, "Recherche Bluetooth…", "orange")
         try:
-            result = await self.device_manager.run_once(self.on_device_event)
+            await self.device_manager.run(self.on_device_event, on_error=self.on_scan_error)
         finally:
             self.state = {"plus": False, "minus": False}
             for task in list(self.tasks):
                 task.cancel()
             self.event_engine.reset()
-        if result is None:
-            self.not_found += 1
-            msg = "Click introuvable : appuie sur un bouton jusqu'à ce que la LED pulse en bleu."
-            if self.not_found >= 3:
-                msg += (" Vérifie aussi qu'aucune autre appli (Zwift, Companion, téléphone) "
-                        "n'est connectée au Click.")
-            self.report(msg)
-            return msg, "orange"
-        self.not_found = 0
-        self.search_logged = False
-        return result or ("Click déconnecté : réveille-le (appui sur un bouton)", "orange")
+        return "Recherche des périphériques Zwift…", "orange"
 
     def on_battery(self, pct):
         self.emit("battery", pct)
-        if pct != self.last_battery:
+        if pct != self.last_battery.get("click"):
             logger.info("Battery: %d%%", pct)
-            self.last_battery = pct
+            self.last_battery["click"] = pct
+
+    def on_ride_battery(self, side, pct):
+        self.emit("device_battery", f"ride_{side}", pct)
+        key = f"ride_{side}"
+        if pct != self.last_battery.get(key):
+            logger.info("Battery (%s): %d%%", key, pct)
+            self.last_battery[key] = pct
 
     def on_driver_log(self, message):
         self.emit("log", message)
         if (message in ("Clé de l'appareil reçue", "Click déconnecté")
-                or message.startswith("Connecté à ")):
+                or message.startswith(("Connecté à ", "Zwift Ride ", "Clé de l'unité"))):
             logger.info(message)
 
     def on_device_event(self, event, wire_payload=None, decoded_payload=None):
         """Seuls les événements normalisés du pilote entrent dans le moteur de gestes."""
-        derived = self.event_engine.feed(event)
-        self.publish_events(derived, wire_payload=wire_payload,
-                            decoded_payload=decoded_payload)
+        if event.type in EventEngine.BUTTONS:
+            derived = self.event_engine.feed(event)
+            self.publish_events(derived, wire_payload=wire_payload,
+                                decoded_payload=decoded_payload)
+        else:
+            self.publish_events([event], wire_payload=wire_payload,
+                                decoded_payload=decoded_payload)
         if event.type in (EventType.PLUS_DOWN, EventType.MINUS_DOWN):
             which = "plus" if event.type == EventType.PLUS_DOWN else "minus"
             self.emit("button", which)
             logger.info("BUTTON_%s", which.upper())
+        elif event.type in RIDE_BUTTON_EVENTS:
+            side, name, pressed, _action_key = RIDE_BUTTON_EVENTS[event.type]
+            self.emit("ride_button", side, name, pressed)
+            if pressed:
+                logger.info("RIDE_%s_%s", side.upper(), name)
+        elif event.type == EventType.RIDE_PADDLE:
+            side = "left" if event.device_id.endswith("left") else "right"
+            self.emit("ride_paddle", side, event.value)
 
     def publish_events(self, events, wire_payload=None, decoded_payload=None):
         """Résout chaque événement avec le profil actif puis exécute son action clavier."""
@@ -349,9 +448,20 @@ class Worker:
         actions = profile["actions"]
         for event in events:
             event_name = event.type.value.lower()
+            if event.type in RIDE_BUTTON_EVENTS:
+                side, name, pressed, _action_key = RIDE_BUTTON_EVENTS[event.type]
+                if self.shared["verbose"]:
+                    self.emit("diagnostic", "Ride BLE", wire_payload.hex() if wire_payload else "",
+                              decoded_payload.hex() if decoded_payload else "",
+                              f"{side.upper()}_{name}_{'DOWN' if pressed else 'UP'}", "—")
+                if not pressed:
+                    continue
+            if event.type == EventType.RIDE_PADDLE:
+                continue
             if self.shared["verbose"]:
                 self.emit("log", f"Événement : {event.type.value}")
-            action = actions.get(event_name, "").strip()
+            action_key = RIDE_PROFILE_ACTIONS.get(event.type, event_name)
+            action = actions.get(action_key, "").strip()
             if self.shared["verbose"]:
                 interpreted = ("PLUS" if event.type == EventType.PLUS_DOWN else
                                "MINUS" if event.type == EventType.MINUS_DOWN else event.type.value)
@@ -366,6 +476,11 @@ class Worker:
                 which = "plus" if event.type == EventType.PLUS_DOWN else "minus"
                 label = "+" if which == "plus" else "−"
                 self.spawn(self.press_task(which, label, action))
+            elif event.type in RIDE_PROFILE_ACTIONS:
+                metadata = RIDE_BUTTON_EVENTS[event.type]
+                if metadata[2]:
+                    label = f"Ride {metadata[0]} — {metadata[1]}"
+                    self.spawn(self.send(action_key, label, first=True, key_name=action))
             else:
                 which = event.buttons[0] if event.buttons else "plus"
                 label = event.type.value
@@ -447,14 +562,15 @@ class App:
         self.queue = queue.Queue()
         self.worker = None
         self.battery_alerted = False
+        self.ride_battery_alerted = {"left": False, "right": False}
 
         self.colors = {"bg": "#101820", "card": "#1a2732", "card2": "#22323f",
                        "text": "#f1f5f8", "muted": "#9aabb8", "accent": "#54d6a1",
                        "green": "#2ecc71", "orange": "#f5a623", "gray": "#aab4bd",
                        "red": "#ff5c65"}
         root.configure(bg=self.colors["bg"])
-        root.geometry("420x560")
-        root.minsize(380, 520)
+        root.geometry("460x720")
+        root.minsize(400, 600)
         style = ttk.Style(root)
         try:
             style.theme_use("clam")
@@ -475,7 +591,7 @@ class App:
         self.is_active = False
         self.session_elapsed = 0.0
         self.session_started_at = None
-        self.change_counts = {"plus": 0, "minus": 0}
+        self.change_counts = {"plus": 0, "minus": 0, "ride": 0}
         self.diagnostic_history = []
         self.last_action_text = "–"
         self.current_profile_name = self.shared["default_profile"]
@@ -483,11 +599,22 @@ class App:
         self.history_window = None
         self.tray_icon = None
         self.current_status_color = "orange"
-        self.current_status_text = "Recherche du Click…"
+        self.current_status_text = "Recherche des périphériques Zwift…"
         self.last_poll_at = time.time()
 
-        main = tk.Frame(root, bg=self.colors["bg"], padx=18, pady=10)
-        main.pack(fill="both", expand=True)
+        viewport = tk.Frame(root, bg=self.colors["bg"])
+        viewport.pack(fill="both", expand=True)
+        dashboard = tk.Canvas(viewport, bg=self.colors["bg"], highlightthickness=0)
+        dashboard_scroll = ttk.Scrollbar(viewport, orient="vertical", command=dashboard.yview)
+        dashboard.configure(yscrollcommand=dashboard_scroll.set)
+        dashboard.pack(side="left", fill="both", expand=True)
+        dashboard_scroll.pack(side="right", fill="y")
+        main = tk.Frame(dashboard, bg=self.colors["bg"], padx=12, pady=8)
+        main_window = dashboard.create_window((0, 0), window=main, anchor="nw")
+        main.bind("<Configure>", lambda _event: dashboard.configure(
+            scrollregion=dashboard.bbox("all")))
+        dashboard.bind("<Configure>", lambda event: dashboard.itemconfigure(
+            main_window, width=event.width))
         header = tk.Frame(main, bg=self.colors["bg"])
         header.pack(fill="x")
         tk.Label(header, text="Click Bridge", bg=self.colors["bg"], fg=self.colors["text"],
@@ -503,12 +630,16 @@ class App:
         self.status = tk.Label(status_row, text="RECHERCHE / CONNEXION", bg=self.colors["card"],
                                fg=self.colors["orange"], font=("Segoe UI", 11, "bold"))
         self.status.pack(side="left")
-        self.status_detail = tk.Label(hero, text="Recherche du Click…", bg=self.colors["card"],
+        self.status_detail = tk.Label(hero, text="Recherche des périphériques Zwift…", bg=self.colors["card"],
                                       fg=self.colors["muted"], font=("Segoe UI", 9), wraplength=340)
         self.status_detail.pack(pady=(2, 4))
         tk.Label(hero, text="Zwift Click V1", bg=self.colors["card"], fg=self.colors["text"],
                  font=("Segoe UI", 14, "bold")).pack(pady=(4, 1))
-        self.battery = tk.Label(hero, text="Batterie : –", bg=self.colors["card"],
+        self.click_device_status = tk.Label(hero, text="Recherche Bluetooth…",
+                                            bg=self.colors["card"], fg=self.colors["muted"],
+                                            font=("Segoe UI", 9))
+        self.click_device_status.pack()
+        self.battery = tk.Label(hero, text="Batterie Click : –", bg=self.colors["card"],
                                 fg=self.colors["muted"], font=("Segoe UI", 10))
         self.battery.pack()
 
@@ -531,6 +662,58 @@ class App:
         self.last = tk.Label(hero, text="Dernière action : –", bg=self.colors["card"],
                              fg=self.colors["muted"], font=("Segoe UI", 10))
         self.last.pack(pady=(0, 0))
+
+        ride_card = tk.Frame(main, bg=self.colors["card"], padx=10, pady=7)
+        ride_card.pack(fill="x", pady=(0, 7))
+        tk.Label(ride_card, text="Zwift Ride", bg=self.colors["card"], fg=self.colors["text"],
+                 font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        tk.Label(ride_card,
+                 text="Intégration expérimentale — protocole observé sur firmware 1.1.0, matériel à valider",
+                 bg=self.colors["card"], fg=self.colors["muted"],
+                 font=("Segoe UI", 8), wraplength=390, justify="left").pack(anchor="w", pady=(0, 5))
+        ride_sides = tk.Frame(ride_card, bg=self.colors["card"])
+        ride_sides.pack(fill="x")
+        self.ride_status_labels = {}
+        self.ride_battery_labels = {}
+        self.ride_button_labels = {}
+        self.ride_paddle_labels = {}
+        ride_layouts = {
+            "left": (("UP", 0, 1, "↑"), ("LEFT", 1, 0, "←"),
+                     ("RIGHT", 1, 2, "→"), ("DOWN", 2, 1, "↓"),
+                     ("SHIFT_UP_L", 3, 0, "L+"),
+                     ("SHIFT_DN_L", 3, 1, "L−")),
+            "right": (("A", 0, 0, "A"), ("B", 0, 1, "B"),
+                      ("Y", 1, 0, "Y"), ("Z", 1, 1, "Z"),
+                      ("SHIFT_UP_R", 2, 0, "L+"),
+                      ("SHIFT_DN_R", 2, 1, "L−")),
+        }
+        for column, side in enumerate(("left", "right")):
+            side_card = tk.Frame(ride_sides, bg=self.colors["card2"], padx=7, pady=5)
+            side_card.grid(row=0, column=column, sticky="nsew",
+                           padx=(0, 4) if column == 0 else (4, 0))
+            ride_sides.columnconfigure(column, weight=1)
+            side_label = "gauche" if side == "left" else "droite"
+            tk.Label(side_card, text=f"Unité {side_label}", bg=self.colors["card2"],
+                     fg=self.colors["text"], font=("Segoe UI", 9, "bold")).grid(
+                         row=0, column=0, columnspan=3, sticky="w")
+            self.ride_status_labels[side] = tk.Label(
+                side_card, text="Recherche…", bg=self.colors["card2"],
+                fg=self.colors["muted"], font=("Segoe UI", 8))
+            self.ride_status_labels[side].grid(row=1, column=0, columnspan=3, sticky="w")
+            self.ride_battery_labels[side] = tk.Label(
+                side_card, text="Batterie : –", bg=self.colors["card2"],
+                fg=self.colors["muted"], font=("Segoe UI", 8))
+            self.ride_battery_labels[side].grid(row=2, column=0, columnspan=3, sticky="w")
+            for name, row, col, label in ride_layouts[side]:
+                key_label = tk.Label(side_card, text=label, width=5, padx=2, pady=2,
+                                     bg=self.colors["card"], fg=self.colors["muted"],
+                                     font=("Segoe UI", 8, "bold"))
+                key_label.grid(row=row + 3, column=col, padx=2, pady=2, sticky="ew")
+                self.ride_button_labels[(side, name)] = key_label
+            self.ride_paddle_labels[side] = tk.Label(
+                side_card, text="Paddle analogique : –", bg=self.colors["card2"],
+                fg=self.colors["muted"], font=("Segoe UI", 8))
+            self.ride_paddle_labels[side].grid(row=7, column=0, columnspan=3, sticky="w")
 
         profile_card = tk.Frame(main, bg=self.colors["card"], padx=10, pady=6)
         profile_card.pack(fill="x", pady=(0, 7))
@@ -575,7 +758,8 @@ class App:
                   font=("Segoe UI", 9, "underline")).pack(side="right")
         self.stat_values = {}
         stat_rows = (("duration", "Durée", 1, 0), ("changes", "Changements", 2, 0),
-                     ("plus", "+", 3, 0), ("minus", "−", 3, 2),
+                     ("plus", "+ Click", 3, 0), ("minus", "− Click", 3, 2),
+                     ("ride", "Appuis Ride", 4, 0),
                      ("average", "Moyenne", 1, 2))
         for key, label, row, column in stat_rows:
             tk.Label(stats, text=label, bg=self.colors["card"], fg=self.colors["muted"],
@@ -1069,18 +1253,19 @@ class App:
             defaultextension=".zip", filetypes=(("Archive ZIP", "*.zip"),))
         if not path:
             return
-        info = self.worker.driver.get_device_info() if self.worker else None
         device_info = {}
-        if info is not None:
-            device_info = {
-                "device_type": info.device_type, "model": info.model,
-                "manufacturer": info.manufacturer, "device_id": info.device_id,
-                "firmware_version": info.firmware_version,
-                "protocol_version": info.protocol_version,
-                "capabilities": sorted(info.capabilities),
-                "connection_state": info.connection_state.value,
-                "compatibility": info.compatibility.value,
-            }
+        if self.worker:
+            for key, driver in self.worker.drivers.items():
+                info = driver.get_device_info()
+                device_info[key] = {
+                    "device_type": info.device_type, "model": info.model,
+                    "manufacturer": info.manufacturer, "device_id": info.device_id,
+                    "firmware_version": info.firmware_version,
+                    "protocol_version": info.protocol_version,
+                    "capabilities": sorted(info.capabilities),
+                    "connection_state": info.connection_state.value,
+                    "compatibility": info.compatibility.value,
+                }
         app_state = {
             "status": self.tray_status(), "status_detail": self.current_status_text,
             "active_profile": self.shared["active_profile"],
@@ -1285,12 +1470,14 @@ class App:
             elapsed += time.monotonic() - self.session_started_at
         seconds = int(elapsed)
         duration = f"{seconds // 3600:02d}:{(seconds // 60) % 60:02d}:{seconds % 60:02d}"
-        total = self.change_counts["plus"] + self.change_counts["minus"]
+        total = (self.change_counts["plus"] + self.change_counts["minus"]
+                 + self.change_counts["ride"])
         average = total / (elapsed / 60) if elapsed > 0 else 0.0
         self.stat_values["duration"].config(text=duration)
         self.stat_values["changes"].config(text=str(total))
         self.stat_values["plus"].config(text=str(self.change_counts["plus"]))
         self.stat_values["minus"].config(text=str(self.change_counts["minus"]))
+        self.stat_values["ride"].config(text=str(self.change_counts["ride"]))
         self.stat_values["average"].config(text=f"{average:.1f}".replace(".", ",") + "/min")
 
     def load_history(self):
@@ -1320,10 +1507,11 @@ class App:
             style.configure("History.Treeview.Heading", background=self.colors["card2"],
                             foreground=self.colors["text"])
             self.history_table = ttk.Treeview(
-                body, columns=("date", "profile", "duration", "changes"),
+                body, columns=("date", "profile", "duration", "changes", "ride"),
                 show="headings", style="History.Treeview")
-            for column, heading, width in (("date", "Date", 105), ("profile", "Profil", 170),
-                                           ("duration", "Durée", 100), ("changes", "Changements", 120)):
+            for column, heading, width in (("date", "Date", 105), ("profile", "Profil", 150),
+                                           ("duration", "Durée", 100),
+                                           ("changes", "Total", 75), ("ride", "Ride", 65)):
                 self.history_table.heading(column, text=heading)
                 self.history_table.column(column, width=width, anchor="w")
             self.history_table.pack(fill="both", expand=True)
@@ -1338,7 +1526,7 @@ class App:
                 self.history_table.insert("", "end", values=(
                     entry.get("date", ""), entry.get("profile", ""),
                     self.format_history_duration(entry.get("duration_seconds", 0)),
-                    entry.get("changes", 0)))
+                    entry.get("changes", 0), entry.get("ride", 0)))
             except (TypeError, ValueError):
                 continue
 
@@ -1349,14 +1537,16 @@ class App:
         if self.session_started_at is not None:
             self.session_elapsed += time.monotonic() - self.session_started_at
             self.session_started_at = None
-        changes = self.change_counts["plus"] + self.change_counts["minus"]
+        changes = (self.change_counts["plus"] + self.change_counts["minus"]
+                   + self.change_counts["ride"])
         if changes == 0:
             return
         entry = {"date": datetime.datetime.now().strftime("%d/%m/%Y"),
                  "profile": self.current_profile_name,
                  "duration_seconds": int(self.session_elapsed),
                  "changes": changes, "plus": self.change_counts["plus"],
-                 "minus": self.change_counts["minus"]}
+                 "minus": self.change_counts["minus"],
+                 "ride": self.change_counts["ride"]}
         history = self.load_history()
         history.insert(0, entry)
         try:
@@ -1374,9 +1564,20 @@ class App:
         button.after(180, lambda: button.config(bg=self.colors["card2"], fg=self.colors["text"]))
         self.update_session_stats()
 
+    def register_ride_button(self, side, name, pressed):
+        label = self.ride_button_labels.get((side, name))
+        if label is None:
+            return
+        label.configure(bg=self.COLORS["green"] if pressed else self.colors["card"],
+                        fg=self.colors["bg"] if pressed else self.colors["muted"])
+        if pressed:
+            self.change_counts["ride"] += 1
+            self.update_session_stats()
+
     def start_worker(self):
         if self.is_active:
             return
+        self.session_saved = False
         self.worker = Worker(self.queue, self.shared)
         self.is_active = True
         self.session_started_at = time.monotonic()
@@ -1388,6 +1589,7 @@ class App:
         if self.is_active:
             self.is_active = False
             self.worker.stop()
+            self.record_session()
             if self.session_started_at is not None:
                 self.session_elapsed += time.monotonic() - self.session_started_at
                 self.session_started_at = None
@@ -1404,6 +1606,34 @@ class App:
         self.status_dot.config(fg=self.COLORS.get(color, self.colors["muted"]))
         self.status_detail.config(text=text)
         self.update_tray_status()
+
+    def set_device_status(self, key, text, color):
+        if key == "click":
+            label = self.click_device_status
+        elif key in ("ride_left", "ride_right"):
+            side = key.split("_", 1)[1]
+            label = self.ride_status_labels[side]
+        else:
+            return
+        label.configure(text=text, fg=self.COLORS.get(color, self.colors["muted"]))
+
+    def show_ride_battery(self, side, pct):
+        label = self.ride_battery_labels[side]
+        if pct is None:
+            label.configure(text="Batterie : –", fg=self.colors["muted"])
+            self.ride_battery_alerted[side] = False
+            return
+        if not isinstance(pct, int) or not 0 <= pct <= 100:
+            self.add_log(f"Batterie Ride {side} invalide ignorée : {pct!r}")
+            return
+        low = self.shared["battery_low"] > 0 and pct <= self.shared["battery_low"]
+        label.configure(text=f"Batterie : {pct} %" + (" ⚠ faible" if low else ""),
+                         fg=self.COLORS["red"] if low else self.colors["muted"])
+        if low and not self.ride_battery_alerted[side]:
+            self.ride_battery_alerted[side] = True
+            self.add_log(f"⚠ Batterie Ride {side} faible : {pct} %")
+        elif not low:
+            self.ride_battery_alerted[side] = False
 
     def add_log(self, text):
         self.log.config(state="normal")
@@ -1426,7 +1656,7 @@ class App:
 
     def show_battery(self, pct):
         if pct is None:
-            self.battery.config(text="Batterie : –", fg=self.colors["muted"])
+            self.battery.config(text="Batterie Click : –", fg=self.colors["muted"])
             return
         if not isinstance(pct, int) or not 0 <= pct <= 100:
             self.add_log(f"Niveau de batterie invalide ignoré : {pct!r}")
@@ -1434,7 +1664,7 @@ class App:
         threshold = self.shared["battery_low"]
         low = threshold > 0 and pct <= threshold
         if low:
-            self.battery.config(text=f"Batterie : {pct} %  ⚠ faible", fg=self.COLORS["red"])
+            self.battery.config(text=f"Batterie Click : {pct} %  ⚠ faible", fg=self.COLORS["red"])
             if not self.battery_alerted:
                 self.battery_alerted = True
                 self.add_log(f"⚠ Batterie faible : {pct} %")
@@ -1444,7 +1674,7 @@ class App:
                 except Exception:
                     pass
         else:
-            self.battery.config(text=f"Batterie : {pct} %", fg=self.colors["muted"])
+            self.battery.config(text=f"Batterie Click : {pct} %", fg=self.colors["muted"])
             self.battery_alerted = False
 
     def poll(self):
@@ -1461,15 +1691,29 @@ class App:
                 kind, *args = self.queue.get_nowait()
                 if kind == "status":
                     self.set_status(*args)
+                elif kind == "status_detail":
+                    self.status_detail.configure(text=args[0])
+                elif kind == "device_status":
+                    self.set_device_status(*args)
                 elif kind == "log":
                     self.add_log(args[0])
                 elif kind == "battery":
                     self.show_battery(args[0])
+                elif kind == "device_battery":
+                    key, pct = args
+                    self.show_ride_battery(key.split("_", 1)[1], pct)
                 elif kind == "press":
                     self.last_action_text = args[0]
                     self.last.config(text=f"Dernière action : {args[0]}")
                 elif kind == "button":
                     self.register_button(args[0])
+                elif kind == "ride_button":
+                    self.register_ride_button(*args)
+                elif kind == "ride_paddle":
+                    side, value = args
+                    label = (f"Paddle analogique : {value}/200" if value is not None
+                             else "Paddle analogique : –")
+                    self.ride_paddle_labels[side].configure(text=label)
                 elif kind == "profile":
                     self.current_profile_name = args[0]
                     self.profile_status.config(text=f"Profil effectif : {args[0]}")

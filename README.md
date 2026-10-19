@@ -2,7 +2,9 @@
 
 # ClickBridge
 
-ClickBridge relie un Zwift Click V1 à Windows et transforme ses boutons en actions configurables.
+ClickBridge relie un Zwift Click V1 ou un Zwift Ride à Windows et transforme leurs boutons en actions configurables.
+
+La prise en charge du Zwift Ride est expérimentale : elle s’appuie sur des captures du firmware 1.1.0 et n’a pas encore été validée sur un appareil réel avec cette version de ClickBridge. Le Ride comprend deux unités Bluetooth (gauche et droite) ; la compatibilité simultanée des connexions dépend aussi de l’adaptateur Bluetooth du PC.
 
 ## Télécharger
 
@@ -21,8 +23,8 @@ L’empreinte affichée doit correspondre à celle indiquée pour `ClickBridge-S
 1. Télécharge `ClickBridge-Setup.exe` depuis le lien ci-dessus.
 2. Ouvre le fichier et accepte la demande Windows d’autorisation d’installation.
 3. À la fin, laisse cochée l’option de lancement de ClickBridge si tu veux l’ouvrir immédiatement.
-4. Active le Bluetooth de Windows et réveille le Zwift Click à proximité.
-5. Dans ClickBridge, vérifie l’état de connexion. Les réglages de profils et de démarrage sont accessibles dans **Configuration**.
+4. Active le Bluetooth de Windows et réveille le Zwift Click ou les unités Zwift Ride à proximité.
+5. Dans ClickBridge, vérifie l’état des périphériques. Les réglages de profils et de démarrage sont accessibles dans **Configuration**.
 
 Pour mettre à jour, utilise **Configuration → Vérifier les mises à jour**, ou télécharge la dernière version depuis la page des releases. L’installateur met à jour l’application sans supprimer les paramètres utilisateur.
 
@@ -32,9 +34,9 @@ Pour mettre à jour, utilise **Configuration → Vérifier les mises à jour**, 
 
 ClickBridge n’est pas signé par un certificat éditeur, ce qui peut déclencher SmartScreen. Vérifie que le fichier vient bien de la [page officielle des releases](https://github.com/TBrassart/ClickBridge/releases) et compare son empreinte SHA-256 avec le manifeste de cette release avant de poursuivre.
 
-### Le Zwift Click n’apparaît pas ou ne se connecte pas
+### Le Zwift Click ou le Zwift Ride n’apparaît pas ou ne se connecte pas
 
-Vérifie que le Bluetooth est activé dans Windows, que le Click est réveillé et proche du PC, puis relance la recherche depuis ClickBridge. Si le problème persiste, exporte un diagnostic et joins-le à un signalement après l’avoir vérifié.
+Vérifie que le Bluetooth est activé dans Windows et que l’appareil est réveillé et proche du PC, puis relance la recherche depuis ClickBridge. Ferme Zwift et toute autre application susceptible d’être connectée aux mêmes appareils. Pour le Ride, les deux unités gauche et droite se connectent séparément ; si une seule apparaît, vérifie l’adaptateur Bluetooth et exporte un diagnostic après l’avoir vérifié.
 
 ### La fenêtre n’est pas visible
 
@@ -52,4 +54,4 @@ Pour savoir comment exporter et vérifier un diagnostic avant de le joindre, con
 
 ## État du projet
 
-La release actuelle est **v1.0.1**. La connexion et le comportement avec un Zwift Click physique doivent encore être confirmés sur les appareils concernés. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et diagnostic](SUPPORT.md).
+La release actuelle est **v1.0.1**. La prise en charge du Zwift Ride dans la branche de développement est expérimentale et attend une validation sur matériel réel. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et diagnostic](SUPPORT.md).

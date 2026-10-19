@@ -101,11 +101,15 @@ class ClickV1Driver(DeviceDriver):
     def get_device_info(self):
         return self.info
 
+    @staticmethod
+    def matches(device, advertisement):
+        return bool(device.name) and device.name.startswith(DEVICE_NAME_PREFIX)
+
     async def detect(self):
         self.info = replace(self.info, connection_state=ConnectionState.SCANNING)
         try:
             device = await BleakScanner.find_device_by_filter(
-                lambda d, ad: bool(d.name) and d.name.startswith(DEVICE_NAME_PREFIX), timeout=30)
+                self.matches, timeout=30)
         except Exception:
             self.info = replace(self.info, connection_state=ConnectionState.ERROR)
             raise

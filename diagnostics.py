@@ -77,16 +77,26 @@ def build_diagnostic_data(app_state, device_info, config, log_path,
         line for line in application_log.splitlines()
         if re.search(r"\b(?:WARNING|ERROR|CRITICAL)\b", line))
 
-    device = _sanitize(copy.deepcopy(device_info or {}), sensitive, anonymize)
-    if anonymize and isinstance(device, dict):
-        device["device_id"] = "[ANONYMISÉ]" if device.get("device_id") else ""
+    source_devices = copy.deepcopy(device_info or {})
+    if isinstance(source_devices, dict) and "device_type" in source_devices:
+        source_devices = {"active": source_devices}
+    elif not isinstance(source_devices, dict):
+        source_devices = {}
+    devices = _sanitize(source_devices, sensitive, anonymize)
+    if anonymize:
+        for item in devices.values():
+            if isinstance(item, dict) and "device_id" in item:
+                item["device_id"] = "[ANONYMISÉ]" if item.get("device_id") else ""
 
     state = dict(app_state or {})
     active_profile = state.get("active_profile", "Automatique")
     state["active_profile"] = _redact_text(active_profile, sensitive, anonymize)
     state["default_profile"] = _redact_text(state.get("default_profile", ""), sensitive, anonymize)
     state["status_detail"] = _redact_text(state.get("status_detail", ""), sensitive, anonymize)
-    state["device"] = device
+    state["devices"] = devices
+
+    click_info = devices.get("click", devices.get("click_v1", {}))
+    ride_units = {side: devices.get(f"ride_{side}", {}) for side in ("left", "right")}
 
     data = {
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -108,10 +118,11 @@ def build_diagnostic_data(app_state, device_info, config, log_path,
             "adapter_status": "Non interrogé directement par l'application",
         },
         "devices": {
-            "click_v1": {"supported": True, "info": device},
+            "click_v1": {"supported": "click" in devices or "click_v1" in devices,
+                         "info": click_info},
+            "zwift_ride": {"supported": any(ride_units.values()), "units": ride_units},
             "click_v2": {"supported": False, "status": "Non implémenté"},
             "play": {"supported": False, "status": "Non implémenté"},
-            "ride": {"supported": False, "status": "Non implémenté"},
         },
         "profiles": {
             "count": len(profiles) if isinstance(profiles, list) else 0,
@@ -136,26 +147,33 @@ def build_diagnostic_data(app_state, device_info, config, log_path,
     capture = "\n\n".join(str(record) for record in protocol_records) if advanced_capture else ""
     if anonymize and capture:
         capture = _redact_text(capture, sensitive, True)
-    return data, application_log, error_log, device, capture
+    return data, application_log, error_log, devices, capture
 
 
 def export_diagnostic_zip(path, app_state, device_info, config, log_path,
                           anonymize=True, include_configuration=False,
                           advanced_capture=False, protocol_records=()):
     """Écrit l'archive demandée et retourne sa liste de membres."""
-    data, application_log, error_log, device, capture = build_diagnostic_data(
+    data, application_log, error_log, devices, capture = build_diagnostic_data(
         app_state, device_info, config, log_path, anonymize,
         include_configuration, advanced_capture, protocol_records)
+    click_info = devices.get("click", devices.get("click_v1", {}))
     compatibility = {
-        "click_v1": {"supported": True, "status": device.get("compatibility", "unknown")},
+        "click_v1": {"supported": "click" in devices or "click_v1" in devices,
+                      "status": click_info.get("compatibility", "unknown")},
+        "zwift_ride_left": {
+            "supported": bool(devices.get("ride_left")),
+            "status": devices.get("ride_left", {}).get("compatibility", "unknown")},
+        "zwift_ride_right": {
+            "supported": bool(devices.get("ride_right")),
+            "status": devices.get("ride_right", {}).get("compatibility", "unknown")},
         "click_v2": {"supported": False, "status": "Non implémenté"},
         "play": {"supported": False, "status": "Non implémenté"},
-        "ride": {"supported": False, "status": "Non implémenté"},
     }
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("diagnostic.json", json.dumps(data, ensure_ascii=False, indent=2))
         archive.writestr("application.log", application_log or "Aucun journal disponible.\n")
-        archive.writestr("device-info.json", json.dumps(device, ensure_ascii=False, indent=2))
+        archive.writestr("device-info.json", json.dumps(devices, ensure_ascii=False, indent=2))
         archive.writestr("compatibility.json", json.dumps(compatibility, ensure_ascii=False, indent=2))
         archive.writestr("errors.log", error_log or "Aucune erreur ou alerte enregistrée.\n")
         if capture:

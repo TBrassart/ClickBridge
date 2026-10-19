@@ -17,6 +17,18 @@ ACTION_FIELDS = (
     ("minus_double", "Double appui −"),
     ("combination", "Deux boutons ensemble"),
     ("sequence", "Séquence de gestes"),
+    ("ride_left", "Ride gauche — croix gauche"),
+    ("ride_up", "Ride gauche — croix haut"),
+    ("ride_right", "Ride gauche — croix droite"),
+    ("ride_down", "Ride gauche — croix bas"),
+    ("ride_shift_up_l", "Ride gauche — levier haut"),
+    ("ride_shift_dn_l", "Ride gauche — levier bas"),
+    ("ride_a", "Ride droite — bouton A"),
+    ("ride_b", "Ride droite — bouton B"),
+    ("ride_y", "Ride droite — bouton Y"),
+    ("ride_z", "Ride droite — bouton Z"),
+    ("ride_shift_up_r", "Ride droite — levier haut"),
+    ("ride_shift_dn_r", "Ride droite — levier bas"),
 )
 
 
@@ -127,8 +139,8 @@ class ProfileDialog:
         self.loading = False
         self.window = tk.Toplevel(parent)
         self.window.title("Gestion des profils")
-        self.window.geometry("680x610")
-        self.window.minsize(620, 570)
+        self.window.geometry("760x720")
+        self.window.minsize(680, 620)
         self.window.transient(parent)
 
         body = ttk.Frame(self.window, padding=10)
@@ -147,8 +159,22 @@ class ProfileDialog:
         ttk.Button(controls, text="Nouveau", command=self.add_profile).pack(side="left")
         ttk.Button(controls, text="Supprimer", command=self.delete_profile).pack(side="left", padx=4)
 
-        editor = ttk.Frame(body)
-        editor.grid(row=0, column=1, sticky="nsew")
+        editor_container = ttk.Frame(body)
+        editor_container.grid(row=0, column=1, sticky="nsew")
+        editor_container.columnconfigure(0, weight=1)
+        editor_container.rowconfigure(0, weight=1)
+        editor_canvas = tk.Canvas(editor_container, highlightthickness=0)
+        editor_scrollbar = ttk.Scrollbar(editor_container, orient="vertical",
+                                         command=editor_canvas.yview)
+        editor_canvas.configure(yscrollcommand=editor_scrollbar.set)
+        editor_canvas.grid(row=0, column=0, sticky="nsew")
+        editor_scrollbar.grid(row=0, column=1, sticky="ns")
+        editor = ttk.Frame(editor_canvas, padding=(2, 2, 10, 2))
+        editor_window = editor_canvas.create_window((0, 0), window=editor, anchor="nw")
+        editor.bind("<Configure>", lambda _event: editor_canvas.configure(
+            scrollregion=editor_canvas.bbox("all")))
+        editor_canvas.bind("<Configure>", lambda event: editor_canvas.itemconfigure(
+            editor_window, width=event.width))
         editor.columnconfigure(1, weight=1)
         self.name_var = tk.StringVar()
         self.application_var = tk.StringVar()
