@@ -64,7 +64,7 @@ Certaines versions ou certains états de l’appareil ne transmettent pas imméd
 
 ### La fenêtre paraît coupée ou les commandes ne sont pas visibles
 
-Utilise une version récente depuis les releases officielles. Depuis **v1.0.6**, l’écran Ride est plus compact ; **v1.0.7** ajoute aussi des panneaux arrondis et des sélecteurs plus visibles. Vérifie que la fenêtre n’est pas simplement masquée dans la zone de notification. Si le bas reste coupé, indique la résolution de l’écran, le facteur de mise à l’échelle Windows et le périphérique sélectionné.
+Utilise une version récente depuis les releases officielles. Depuis **v1.0.6**, l’écran Ride est plus compact ; **v1.0.7.1** affine le style des cartes, des commandes et du logo. Vérifie que la fenêtre n’est pas simplement masquée dans la zone de notification. Si le bas reste coupé, indique la résolution de l’écran, le facteur de mise à l’échelle Windows et le périphérique sélectionné.
 
 ### La mise à jour affiche « Failed to load Python DLL » ou ne relance pas l’application
 

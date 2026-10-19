@@ -16,7 +16,7 @@ RELEASES_PAGE = f"https://github.com/{OWNER}/{REPOSITORY}/releases/latest"
 INSTALLER_NAME = "ClickBridge-Setup.exe"
 CHECKSUMS_NAME = "SHA256SUMS.txt"
 MAX_INSTALLER_BYTES = 250 * 1024 * 1024
-VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
+VERSION_PATTERN = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?$")
 
 
 class UpdateError(RuntimeError):
@@ -27,7 +27,7 @@ def _version_tuple(value):
     match = VERSION_PATTERN.fullmatch(str(value).strip())
     if not match:
         raise UpdateError(f"Version de release non reconnue : {value!r}")
-    return tuple(int(part) for part in match.groups())
+    return tuple(int(part) for part in match.groups() if part is not None)
 
 
 def _github_request(url):

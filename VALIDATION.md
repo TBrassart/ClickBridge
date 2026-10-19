@@ -4,14 +4,14 @@ Cette checklist est à suivre après une nouvelle installation ou une mise à jo
 
 ## Avant de commencer
 
-- [ ] Noter la version affichée dans **Configuration** (version à valider : **v1.0.7**).
+- [ ] Noter la version affichée dans **Configuration** (version à valider : **v1.0.7.1**).
 - [ ] Noter la version de Windows et le type d’adaptateur Bluetooth utilisé.
 - [ ] Fermer Zwift et les autres applications qui pourraient déjà utiliser les appareils.
 - [ ] Vérifier que le Bluetooth Windows est activé et que les appareils sont chargés.
 
 ## Installation et interface
 
-- [ ] Installer ClickBridge depuis la [release officielle](https://github.com/TBrassart/ClickBridge/releases/tag/v1.0.7), puis lancer l’application.
+- [ ] Installer ClickBridge depuis la [release officielle](https://github.com/TBrassart/ClickBridge/releases/tag/v1.0.7.1), puis lancer l’application.
 - [ ] Vérifier que la fenêtre s’ouvre sans erreur et que **Configuration** et **Journal** sont accessibles.
 - [ ] Sélectionner **Zwift Click V1**, puis **Zwift Ride** : les unités Ride gauche et droite doivent rester groupées.
 - [ ] En mode Ride, vérifier que les deux panneaux, les boutons, les statistiques et le pied de fenêtre restent visibles, sans ascenseur.

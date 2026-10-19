@@ -28,10 +28,10 @@ from profiles import ProfileDialog, make_legacy_profile, normalize_profiles, res
 
 try:
     import pystray
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw, ImageFont, ImageTk
 except ImportError:
     pystray = None
-    Image = ImageDraw = ImageFont = None
+    Image = ImageDraw = ImageFont = ImageTk = None
 
 from pynput.keyboard import Controller, Key
 
@@ -74,8 +74,10 @@ def _rounded_points(width, height, radius):
 class RoundedCard(tk.Frame):
     """Frame with a rounded color surface, drawn behind its normal Tk children."""
 
-    def __init__(self, master, fill, **kwargs):
+    def __init__(self, master, fill, border=None, radius=18, **kwargs):
         self.fill = fill
+        self.border = border or fill
+        self.radius = radius
         self.outer = master.cget("bg")
         super().__init__(master, bg=self.outer, bd=0, highlightthickness=0, **kwargs)
         self.surface = tk.Canvas(self, bg=self.outer, bd=0, highlightthickness=0)
@@ -86,8 +88,9 @@ class RoundedCard(tk.Frame):
         self.surface.delete("surface")
         width, height = self.surface.winfo_width(), self.surface.winfo_height()
         if width > 2 and height > 2:
-            self.surface.create_polygon(*_rounded_points(width - 1, height - 1, 14),
-                                        fill=self.fill, outline=self.fill, tags="surface")
+            self.surface.create_polygon(*_rounded_points(width - 1, height - 1, self.radius),
+                                        fill=self.fill, outline=self.border, width=1,
+                                        tags="surface")
 
 
 class RoundedChoice(tk.Canvas):
@@ -690,7 +693,8 @@ class Worker:
 
 
 class App:
-    COLORS = {"green": "#34d399", "orange": "#fbbf24", "gray": "#a7b4c2", "red": "#fb7185"}
+    COLORS = {"green": "#34d399", "minus": "#8b7cff", "orange": "#fbbf24",
+              "gray": "#9fb3d9", "red": "#f87171"}
 
     def __init__(self, root):
         self.root = root
@@ -723,10 +727,11 @@ class App:
         self.battery_alerted = False
         self.ride_battery_alerted = {"left": False, "right": False}
 
-        self.colors = {"bg": "#0b1220", "card": "#111d2b", "card2": "#1b2b3b",
-                       "border": "#304254", "text": "#edf4fa", "muted": "#9aabba",
-                       "accent": "#4de0b2", "green": "#34d399", "orange": "#fbbf24",
-                       "gray": "#a7b4c2", "red": "#fb7185"}
+        self.colors = {"bg": "#050d1f", "card": "#10244a", "card2": "#12284f",
+                       "border": "#22427c", "text": "#f4f8ff", "muted": "#9fb3d9",
+                       "accent": "#22c3f2", "blue": "#2b7bff", "green": "#34d399",
+                       "purple": "#8b7cff", "orange": "#fbbf24", "gray": "#9fb3d9",
+                       "red": "#f87171"}
         root.configure(bg=self.colors["bg"])
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
@@ -803,10 +808,31 @@ class App:
         main.pack(fill="both", expand=True)
         header = tk.Frame(main, bg=self.colors["bg"])
         header.pack(fill="x")
-        tk.Label(header, text="Click Bridge", bg=self.colors["bg"], fg=self.colors["text"],
-                 font=("Segoe UI", 18, "bold")).pack(side="left")
+        self.header_logo = None
+        if ImageTk is not None:
+            try:
+                with Image.open(resource_path("logo.ico")) as logo_source:
+                    logo_image = logo_source.convert("RGBA").resize(
+                        (42, 42), Image.Resampling.LANCZOS)
+                self.header_logo = ImageTk.PhotoImage(logo_image, master=root)
+                tk.Label(header, image=self.header_logo, bg=self.colors["bg"],
+                         bd=0).pack(side="left", padx=(0, 10))
+            except (OSError, AttributeError, tk.TclError):
+                RoundedControl(header, "CB", self.colors, 34, 34, radius=12,
+                               bg=self.colors["blue"], fg=self.colors["text"],
+                               font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 10))
+        else:
+            RoundedControl(header, "CB", self.colors, 34, 34, radius=12,
+                           bg=self.colors["blue"], fg=self.colors["text"],
+                           font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 10))
+        brand_text = tk.Frame(header, bg=self.colors["bg"])
+        brand_text.pack(side="left")
+        tk.Label(brand_text, text="ClickBridge", bg=self.colors["bg"],
+                 fg=self.colors["text"], font=("Segoe UI", 18, "bold")).pack(anchor="w")
+        tk.Label(brand_text, text="Zwift Click  →  MyWhoosh", bg=self.colors["bg"],
+                 fg=self.colors["muted"], font=("Segoe UI", 9)).pack(anchor="w", pady=(0, 2))
 
-        hero = RoundedCard(main, self.colors["card"], padx=12, pady=7)
+        hero = RoundedCard(main, self.colors["card"], self.colors["border"], padx=12, pady=7)
         hero.pack(fill="x", pady=(8, 8))
         status_row = tk.Frame(hero, bg=self.colors["card"])
         status_row.pack()
@@ -847,12 +873,12 @@ class App:
         click_buttons.pack(pady=(8, 6))
         self.plus_button = RoundedControl(click_buttons, "+", self.colors, 104, 74,
                                           radius=14, bg=self.colors["card2"],
-                                          fg=self.colors["text"],
+                                          fg=self.colors["green"],
                                           font=("Segoe UI", 19, "bold"), state="disabled")
         self.plus_button.pack(side="left", padx=18)
         self.minus_button = RoundedControl(click_buttons, "−", self.colors, 104, 74,
                                            radius=14, bg=self.colors["card2"],
-                                           fg=self.colors["text"],
+                                           fg=self.colors["purple"],
                                            font=("Segoe UI", 19, "bold"), state="disabled")
         self.minus_button.pack(side="left", padx=18)
         self.last = tk.Label(self.click_panel, text="Dernière action : –",
@@ -887,7 +913,8 @@ class App:
         self.click_button_states = {"plus": False, "minus": False}
         self.ride_battery_alerted = {"left": False, "right": False}
         for column, side in enumerate(("left", "right")):
-            side_panel = RoundedCard(ride_sides, self.colors["card2"], padx=6, pady=3)
+            side_panel = RoundedCard(ride_sides, self.colors["card2"], self.colors["border"],
+                                     radius=13, padx=6, pady=3)
             side_panel.grid(row=0, column=column, sticky="nsew",
                             padx=(0, 4) if column == 0 else (4, 0))
             ride_sides.columnconfigure(column, weight=1)
@@ -914,7 +941,8 @@ class App:
             self.render_ride_buttons(side)
         self.click_panel.pack(fill="x")
 
-        profile_card = RoundedCard(main, self.colors["card"], padx=10, pady=6)
+        profile_card = RoundedCard(main, self.colors["card"], self.colors["border"],
+                                   padx=10, pady=6)
         profile_card.pack(fill="x", pady=(0, 7))
         profile_head = tk.Frame(profile_card, bg=self.colors["card"])
         profile_head.pack(fill="x")
@@ -944,7 +972,8 @@ class App:
         self.refresh_profile_controls()
         self.active_profile_changed()
 
-        stats = RoundedCard(main, self.colors["card"], padx=12, pady=8)
+        stats = RoundedCard(main, self.colors["card"], self.colors["border"],
+                            padx=12, pady=8)
         stats.pack(fill="x")
         stats_header = tk.Frame(stats, bg=self.colors["card"])
         stats_header.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 3))
@@ -1782,7 +1811,7 @@ class App:
         self.click_button_states[which] = True
         self.change_counts[which] += 1
         button = self.plus_button if which == "plus" else self.minus_button
-        color = self.COLORS["green"] if which == "plus" else self.COLORS["orange"]
+        color = self.COLORS["green"] if which == "plus" else self.COLORS["minus"]
         button.config(bg=color, fg=self.colors["bg"])
         button.after(180, lambda: self.reset_click_button(which))
         self.update_session_stats()
@@ -1795,7 +1824,8 @@ class App:
     def reset_click_button(self, which):
         self.click_button_states[which] = False
         button = self.plus_button if which == "plus" else self.minus_button
-        button.config(bg=self.colors["card2"], fg=self.colors["text"])
+        inactive_color = self.COLORS["green"] if which == "plus" else self.COLORS["minus"]
+        button.config(bg=self.colors["card2"], fg=inactive_color)
 
     def register_ride_button(self, side, name, pressed):
         self.ride_button_values[(side, name)] = pressed
@@ -1839,7 +1869,7 @@ class App:
             for which, active in self.click_button_states.items():
                 if active:
                     button = self.plus_button if which == "plus" else self.minus_button
-                    color = self.COLORS["green"] if which == "plus" else self.COLORS["orange"]
+                    color = self.COLORS["green"] if which == "plus" else self.COLORS["minus"]
                     button.configure(bg=color, fg=self.colors["bg"])
             self.click_panel.pack(fill="x")
             return
