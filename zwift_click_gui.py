@@ -1,6 +1,7 @@
 """ClickBridge : Zwift Click V1 (firmware chiffré) -> touches clavier, avec interface."""
 import asyncio
 import copy
+import ctypes
 import datetime
 import json
 import logging
@@ -571,8 +572,12 @@ class App:
                        "green": "#2ecc71", "orange": "#f5a623", "gray": "#aab4bd",
                        "red": "#ff5c65"}
         root.configure(bg=self.colors["bg"])
-        root.geometry("460x720")
-        root.minsize(400, 600)
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        window_width = min(500, max(390, screen_width - 24))
+        window_height = min(720, max(620, screen_height - 80))
+        root.geometry(f"{window_width}x{window_height}")
+        root.minsize(min(390, window_width), min(640, window_height))
         style = ttk.Style(root)
         try:
             style.theme_use("clam")
@@ -617,17 +622,8 @@ class App:
 
         viewport = tk.Frame(root, bg=self.colors["bg"])
         viewport.pack(fill="both", expand=True)
-        dashboard = tk.Canvas(viewport, bg=self.colors["bg"], highlightthickness=0)
-        dashboard_scroll = ttk.Scrollbar(viewport, orient="vertical", command=dashboard.yview)
-        dashboard.configure(yscrollcommand=dashboard_scroll.set)
-        dashboard.pack(side="left", fill="both", expand=True)
-        dashboard_scroll.pack(side="right", fill="y")
-        main = tk.Frame(dashboard, bg=self.colors["bg"], padx=12, pady=8)
-        main_window = dashboard.create_window((0, 0), window=main, anchor="nw")
-        main.bind("<Configure>", lambda _event: dashboard.configure(
-            scrollregion=dashboard.bbox("all")))
-        dashboard.bind("<Configure>", lambda event: dashboard.itemconfigure(
-            main_window, width=event.width))
+        main = tk.Frame(viewport, bg=self.colors["bg"], padx=12, pady=8)
+        main.pack(fill="both", expand=True)
         header = tk.Frame(main, bg=self.colors["bg"])
         header.pack(fill="x")
         tk.Label(header, text="Click Bridge", bg=self.colors["bg"], fg=self.colors["text"],
@@ -653,7 +649,7 @@ class App:
         self.device_selector_var = tk.StringVar(value=self.selected_device)
         self.device_selector = ttk.Combobox(
             selector_row, textvariable=self.device_selector_var,
-            values=("Zwift Click V1", "Zwift Ride — gauche", "Zwift Ride — droite"),
+            values=("Zwift Click V1", "Zwift Ride"),
             state="readonly", width=24, style="Dark.TCombobox")
         self.device_selector.pack(side="right")
         self.device_selector.bind("<<ComboboxSelected>>", self.select_device)
@@ -693,7 +689,7 @@ class App:
         self.last.pack()
 
         self.ride_panel = tk.Frame(self.device_panel, bg=self.colors["card"])
-        self.ride_title = tk.Label(self.ride_panel, text="Zwift Ride — gauche",
+        self.ride_title = tk.Label(self.ride_panel, text="Zwift Ride",
                                    bg=self.colors["card"], fg=self.colors["text"],
                                    font=("Segoe UI", 14, "bold"))
         self.ride_title.pack(pady=(2, 1))
@@ -701,23 +697,14 @@ class App:
                  text="Intégration expérimentale — protocole observé sur firmware 1.1.0",
                  bg=self.colors["card"], fg=self.colors["muted"],
                  font=("Segoe UI", 8), wraplength=390, justify="center").pack()
-        self.ride_device_status = tk.Label(self.ride_panel, text="Recherche Bluetooth…",
-                                           bg=self.colors["card"], fg=self.colors["muted"],
-                                           font=("Segoe UI", 9))
-        self.ride_device_status.pack()
-        self.ride_battery = tk.Label(self.ride_panel, text="Batterie : –",
-                                     bg=self.colors["card"], fg=self.colors["muted"],
-                                     font=("Segoe UI", 10))
-        self.ride_battery.pack()
-        self.ride_paddle = tk.Label(self.ride_panel, text="Paddle analogique : –",
-                                    bg=self.colors["card"], fg=self.colors["muted"],
-                                    font=("Segoe UI", 9))
-        self.ride_paddle.pack(pady=(2, 1))
-        ride_buttons = tk.Frame(self.ride_panel, bg=self.colors["card"])
-        ride_buttons.pack(pady=(5, 4))
+        ride_sides = tk.Frame(self.ride_panel, bg=self.colors["card"])
+        ride_sides.pack(fill="x", pady=(4, 0))
+        self.ride_side_panels = {}
+        self.ride_button_frames = {}
+        self.ride_device_status_labels = {}
+        self.ride_battery_labels = {}
+        self.ride_paddle_labels = {}
         self.ride_button_labels = {}
-        self.ride_buttons = ride_buttons
-        self.ride_battery_alerted = {"left": False, "right": False}
         self.ride_device_statuses = {
             "left": ("Recherche Bluetooth…", "orange"),
             "right": ("Recherche Bluetooth…", "orange"),
@@ -727,7 +714,32 @@ class App:
         self.ride_button_values = {}
         self.click_button_states = {"plus": False, "minus": False}
         self.ride_battery_alerted = {"left": False, "right": False}
-        self.render_ride_buttons("left")
+        for column, side in enumerate(("left", "right")):
+            side_panel = tk.Frame(ride_sides, bg=self.colors["card2"], padx=8, pady=6)
+            side_panel.grid(row=0, column=column, sticky="nsew",
+                            padx=(0, 4) if column == 0 else (4, 0))
+            ride_sides.columnconfigure(column, weight=1)
+            self.ride_side_panels[side] = side_panel
+            side_name = "Gauche" if side == "left" else "Droite"
+            tk.Label(side_panel, text=side_name, bg=self.colors["card2"],
+                     fg=self.colors["text"], font=("Segoe UI", 10, "bold")).pack()
+            self.ride_device_status_labels[side] = tk.Label(
+                side_panel, text="Recherche Bluetooth…", bg=self.colors["card2"],
+                fg=self.colors["muted"], font=("Segoe UI", 8), wraplength=180)
+            self.ride_device_status_labels[side].pack()
+            self.ride_battery_labels[side] = tk.Label(
+                side_panel, text="Batterie : –", bg=self.colors["card2"],
+                fg=self.colors["muted"], font=("Segoe UI", 9))
+            self.ride_battery_labels[side].pack()
+            self.ride_paddle_labels[side] = tk.Label(
+                side_panel, text="Paddle : –", bg=self.colors["card2"],
+                fg=self.colors["muted"], font=("Segoe UI", 8))
+            self.ride_paddle_labels[side].pack()
+            button_frame = tk.Frame(side_panel, bg=self.colors["card2"])
+            button_frame.pack(pady=(4, 0))
+            self.ride_button_frames[side] = button_frame
+            self.ride_button_labels[side] = {}
+            self.render_ride_buttons(side)
         self.click_panel.pack(fill="x")
 
         profile_card = tk.Frame(main, bg=self.colors["card"], padx=10, pady=6)
@@ -798,20 +810,23 @@ class App:
         self.config_window.configure(bg=self.colors["bg"])
         config_body = ttk.Frame(self.config_window, padding=12)
         config_body.pack(fill="both", expand=True)
-        self.config_window.geometry("500x680")
+        config_width = min(540, max(390, screen_width - 24))
+        config_height = min(740, max(620, screen_height - 60))
+        self.config_window.geometry(f"{config_width}x{config_height}")
+        self.config_window.minsize(min(390, config_width), min(620, config_height))
         self.config_window.protocol("WM_DELETE_WINDOW", self.config_window.withdraw)
         diagnostics = ttk.LabelFrame(config_body, text="Diagnostic avancé")
         diagnostics.pack(fill="x", pady=(0, 5))
         self.verbose_var = tk.BooleanVar(value=self.shared["advanced_capture"])
         ttk.Checkbutton(
             diagnostics,
-            text="Capture protocole / diagnostic avancé (session uniquement)",
+            text="Capture protocole avancée (session uniquement)",
             variable=self.verbose_var,
             command=self.set_advanced_capture
         ).pack(anchor="w", padx=8, pady=4)
         ttk.Label(diagnostics, text=("Désactivé par défaut. Peut inclure des trames Bluetooth "
                                      "brutes dans le journal et l'export."),
-                  wraplength=420).pack(anchor="w", padx=8, pady=(0, 5))
+                  wraplength=max(250, config_width - 60)).pack(anchor="w", padx=8, pady=(0, 5))
         ttk.Button(diagnostics, text="Exporter le diagnostic…",
                    command=self.open_diagnostic_export).pack(anchor="e", padx=8, pady=(0, 6))
         config_actions = ttk.Frame(config_body)
@@ -834,7 +849,7 @@ class App:
         self.autostart_var = tk.BooleanVar(value=windows_startup_enabled())
         self.start_minimized_var = tk.BooleanVar(value=self.shared["start_minimized"])
         self.autostart_check = ttk.Checkbutton(
-            windows_options, text="Lancer ClickBridge au démarrage de Windows",
+            windows_options, text="Lancer au démarrage de Windows",
             variable=self.autostart_var, command=self.set_autostart)
         self.autostart_check.pack(anchor="w", padx=8, pady=3)
         self.minimized_check = ttk.Checkbutton(
@@ -850,10 +865,11 @@ class App:
         update_options = ttk.LabelFrame(config_body, text="Mise à jour")
         update_options.pack(fill="x", pady=(0, 5))
         ttk.Label(update_options, text=f"Version actuelle : v{APP_VERSION}").pack(
-            side="left", padx=8, pady=6)
+            side="left" if config_width >= 480 else "top", anchor="w", padx=8, pady=6)
         self.update_button = ttk.Button(update_options, text="Vérifier les mises à jour",
                                         command=self.check_for_updates)
-        self.update_button.pack(side="right", padx=8, pady=6)
+        self.update_button.pack(side="right" if config_width >= 480 else "top",
+                                anchor="e", padx=8, pady=6)
 
         # --- touches du profil par défaut ---
         keys = ttk.LabelFrame(config_body, text="Touches immédiates du profil par défaut")
@@ -902,7 +918,8 @@ class App:
                            font=("Consolas", 9))
         self.log.pack(fill="both", expand=True)
         self.make_button(journal_body, "Copier le journal", self.copy_journal).pack(anchor="e", pady=(8, 0))
-        self.journal_window.geometry("560x420")
+        self.journal_window.geometry(
+            f"{min(560, max(390, screen_width - 24))}x{min(420, max(320, screen_height - 80))}")
         self.journal_window.protocol("WM_DELETE_WINDOW", self.journal_window.withdraw)
 
         root.protocol("WM_DELETE_WINDOW", self.hide_window)
@@ -1222,9 +1239,15 @@ class App:
             return
         try:
             if os.name == "nt":
-                result = ctypes.windll.shell32.ShellExecuteW(
+                # The installer restarts ClickBridge after the current one-file
+                # PyInstaller process exits. Do not let it reuse the deleted _MEI dir.
+                os.environ.pop("_MEIPASS2", None)
+                os.environ["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+                shell_execute = ctypes.windll.shell32.ShellExecuteW
+                shell_execute.restype = ctypes.c_void_p
+                result = shell_execute(
                     None, "runas", path, "/RESTARTAPP", os.path.dirname(path), 1)
-                if result <= 32:
+                if not result or result <= 32:
                     raise OSError(f"Windows n’a pas pu démarrer l’installateur (code {result}).")
             else:
                 subprocess.Popen([path, "/RESTARTAPP"], cwd=os.path.dirname(path),
@@ -1266,7 +1289,7 @@ class App:
         ttk.Button(buttons, text="Continuer…", command=lambda: self.export_diagnostic(
             dialog, anonymize_var.get(), configuration_var.get(), capture_var.get()
         )).pack(side="right")
-        dialog.geometry("520x250")
+        dialog.geometry(f"{min(520, max(390, self.root.winfo_screenwidth() - 24))}x250")
         dialog.grab_set()
 
     def export_diagnostic(self, dialog, anonymize, include_configuration, include_capture):
@@ -1522,7 +1545,9 @@ class App:
             self.history_window = tk.Toplevel(self.root)
             self.history_window.title("Click Bridge — Historique")
             self.history_window.configure(bg=self.colors["bg"])
-            self.history_window.geometry("600x360")
+            self.history_window.geometry(
+                f"{min(600, max(390, self.root.winfo_screenwidth() - 24))}x"
+                f"{min(360, max(300, self.root.winfo_screenheight() - 80))}")
             body = tk.Frame(self.history_window, bg=self.colors["bg"], padx=12, pady=12)
             body.pack(fill="both", expand=True)
             style = ttk.Style(self.history_window)
@@ -1601,15 +1626,15 @@ class App:
 
     def register_ride_button(self, side, name, pressed):
         self.ride_button_values[(side, name)] = pressed
-        selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
-        if self.selected_device.startswith("Zwift Ride") and selected_side == side:
+        if self.selected_device == "Zwift Ride":
             self.render_ride_buttons(side)
         if pressed:
             self.change_counts["ride"] += 1
             self.update_session_stats()
 
     def render_ride_buttons(self, side):
-        for child in self.ride_buttons.winfo_children():
+        frame = self.ride_button_frames[side]
+        for child in frame.winfo_children():
             child.destroy()
         layouts = {
             "left": (("UP", 0, 1, "↑"), ("LEFT", 1, 0, "←"),
@@ -1624,12 +1649,12 @@ class App:
         for name, row, column, caption in layouts[side]:
             active = self.ride_button_values.get((side, name), False)
             label = tk.Label(
-                self.ride_buttons, text=caption, padx=9, pady=5,
-                bg=self.COLORS["green"] if active else self.colors["card2"],
+                frame, text=caption, padx=6, pady=4,
+                bg=self.COLORS["green"] if active else self.colors["card"],
                 fg=self.colors["bg"] if active else self.colors["text"],
-                font=("Segoe UI", 10, "bold"))
+                font=("Segoe UI", 9, "bold"))
             label.grid(row=row, column=column, padx=4, pady=3, sticky="nsew")
-            self.ride_button_labels[(side, name)] = label
+            self.ride_button_labels[side][name] = label
 
     def select_device(self, _event=None):
         self.selected_device = self.device_selector_var.get()
@@ -1645,18 +1670,15 @@ class App:
             return
         for button in (self.plus_button, self.minus_button):
             button.configure(bg=self.colors["card2"], fg=self.colors["text"])
-        side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
-        self.ride_title.configure(text=f"Zwift Ride — {'gauche' if side == 'left' else 'droite'}")
-        status_text, color = self.ride_device_statuses[side]
-        self.ride_device_status.configure(
-            text=status_text, fg=self.COLORS.get(color, self.colors["muted"]))
-        battery = self.ride_battery_values[side]
-        self._render_ride_battery(side, battery)
-        paddle = self.ride_paddle_values[side]
-        self.ride_paddle.configure(
-            text=f"Paddle analogique : {paddle}/200" if paddle is not None
-            else "Paddle analogique : –")
-        self.render_ride_buttons(side)
+        for side in ("left", "right"):
+            status_text, color = self.ride_device_statuses[side]
+            self.ride_device_status_labels[side].configure(
+                text=status_text, fg=self.COLORS.get(color, self.colors["muted"]))
+            self._render_ride_battery(side, self.ride_battery_values[side])
+            paddle = self.ride_paddle_values[side]
+            self.ride_paddle_labels[side].configure(
+                text=f"Paddle : {paddle}/200" if paddle is not None else "Paddle : –")
+            self.render_ride_buttons(side)
         self.ride_panel.pack(fill="x")
 
     def start_worker(self):
@@ -1700,9 +1722,8 @@ class App:
         elif key in ("ride_left", "ride_right"):
             side = key.split("_", 1)[1]
             self.ride_device_statuses[side] = (text, color)
-            selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
-            if self.selected_device.startswith("Zwift Ride") and selected_side == side:
-                self.ride_device_status.configure(
+            if self.selected_device == "Zwift Ride":
+                self.ride_device_status_labels[side].configure(
                     text=text, fg=self.COLORS.get(color, self.colors["muted"]))
             return
         else:
@@ -1710,12 +1731,11 @@ class App:
 
     def show_ride_battery(self, side, pct):
         self.ride_battery_values[side] = pct
-        selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
-        if self.selected_device.startswith("Zwift Ride") and selected_side == side:
+        if self.selected_device == "Zwift Ride":
             self._render_ride_battery(side, pct)
 
     def _render_ride_battery(self, side, pct):
-        label = self.ride_battery
+        label = self.ride_battery_labels[side]
         if pct is None:
             label.configure(text="Batterie : –", fg=self.colors["muted"])
             self.ride_battery_alerted[side] = False
@@ -1811,11 +1831,10 @@ class App:
                 elif kind == "ride_paddle":
                     side, value = args
                     self.ride_paddle_values[side] = value
-                    selected_side = "left" if self.selected_device == "Zwift Ride — gauche" else "right"
-                    if self.selected_device.startswith("Zwift Ride") and selected_side == side:
-                        self.ride_paddle.configure(
-                            text=f"Paddle analogique : {value}/200" if value is not None
-                            else "Paddle analogique : –")
+                    if self.selected_device == "Zwift Ride":
+                        self.ride_paddle_labels[side].configure(
+                            text=f"Paddle : {value}/200" if value is not None
+                            else "Paddle : –")
                 elif kind == "profile":
                     self.current_profile_name = args[0]
                     self.profile_status.config(text=f"Profil effectif : {args[0]}")

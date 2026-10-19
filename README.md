@@ -8,7 +8,7 @@ La prise en charge du Zwift Ride est expérimentale : elle s’appuie sur des ca
 
 ## Télécharger
 
-**[Télécharger ClickBridge v1.0.3 pour Windows](https://github.com/TBrassart/ClickBridge/releases/latest/download/ClickBridge-Setup.exe)**
+**[Télécharger ClickBridge v1.0.4 pour Windows](https://github.com/TBrassart/ClickBridge/releases/latest/download/ClickBridge-Setup.exe)**
 
 La version publiée et son manifeste SHA-256 se trouvent sur la [page des releases](https://github.com/TBrassart/ClickBridge/releases). ClickBridge est actuellement distribué sans certificat de signature éditeur. Windows SmartScreen peut donc afficher un avertissement indiquant que l’éditeur est inconnu. Pour vérifier le fichier, télécharge aussi `SHA256SUMS.txt` depuis la même release et compare l’empreinte :
 
@@ -54,4 +54,4 @@ Pour savoir comment exporter et vérifier un diagnostic avant de le joindre, con
 
 ## État du projet
 
-La release actuelle est **v1.0.3**. La prise en charge du Zwift Ride dans la branche de développement est expérimentale et attend une validation sur matériel réel. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et diagnostic](SUPPORT.md).
+La release actuelle est **v1.0.4**. Cette version corrige le redémarrage après mise à jour et regroupe l’affichage des deux unités Zwift Ride dans un seul choix d’équipement. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et diagnostic](SUPPORT.md).

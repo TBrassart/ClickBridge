@@ -139,8 +139,14 @@ class ProfileDialog:
         self.loading = False
         self.window = tk.Toplevel(parent)
         self.window.title("Gestion des profils")
-        self.window.geometry("760x720")
-        self.window.minsize(680, 620)
+        screen_width = parent.winfo_screenwidth()
+        screen_height = parent.winfo_screenheight()
+        compact = screen_width < 900
+        window_width = min(980, max(390, screen_width - 24))
+        window_height = min(650, max(600, screen_height - 60))
+        self.window.geometry(f"{window_width}x{window_height}")
+        self.window.minsize(min(390 if compact else 900, window_width),
+                            min(600, window_height))
         self.window.transient(parent)
 
         body = ttk.Frame(self.window, padding=10)
@@ -151,7 +157,7 @@ class ProfileDialog:
         left = ttk.Frame(body)
         left.grid(row=0, column=0, sticky="ns", padx=(0, 12))
         ttk.Label(left, text="Profils").pack(anchor="w")
-        self.listbox = tk.Listbox(left, width=22, exportselection=False)
+        self.listbox = tk.Listbox(left, width=13 if compact else 22, exportselection=False)
         self.listbox.pack(fill="y", expand=True, pady=5)
         self.listbox.bind("<<ListboxSelect>>", self.select_profile)
         controls = ttk.Frame(left)
@@ -163,40 +169,43 @@ class ProfileDialog:
         editor_container.grid(row=0, column=1, sticky="nsew")
         editor_container.columnconfigure(0, weight=1)
         editor_container.rowconfigure(0, weight=1)
-        editor_canvas = tk.Canvas(editor_container, highlightthickness=0)
-        editor_scrollbar = ttk.Scrollbar(editor_container, orient="vertical",
-                                         command=editor_canvas.yview)
-        editor_canvas.configure(yscrollcommand=editor_scrollbar.set)
-        editor_canvas.grid(row=0, column=0, sticky="nsew")
-        editor_scrollbar.grid(row=0, column=1, sticky="ns")
-        editor = ttk.Frame(editor_canvas, padding=(2, 2, 10, 2))
-        editor_window = editor_canvas.create_window((0, 0), window=editor, anchor="nw")
-        editor.bind("<Configure>", lambda _event: editor_canvas.configure(
-            scrollregion=editor_canvas.bbox("all")))
-        editor_canvas.bind("<Configure>", lambda event: editor_canvas.itemconfigure(
-            editor_window, width=event.width))
-        editor.columnconfigure(1, weight=1)
+        editor = ttk.Frame(editor_container, padding=(2, 2, 2, 2))
+        editor.grid(row=0, column=0, sticky="nsew")
+        for column in (1, 3):
+            editor.columnconfigure(column, weight=1)
         self.name_var = tk.StringVar()
         self.application_var = tk.StringVar()
         ttk.Label(editor, text="Nom du profil").grid(row=0, column=0, sticky="w", pady=3)
-        ttk.Entry(editor, textvariable=self.name_var).grid(row=0, column=1, sticky="ew", pady=3)
+        ttk.Entry(editor, textvariable=self.name_var).grid(
+            row=0, column=1, columnspan=3, sticky="ew", pady=3)
         ttk.Label(editor, text="Exécutable pour la sélection automatique").grid(
             row=1, column=0, sticky="w", pady=3)
         ttk.Entry(editor, textvariable=self.application_var).grid(
-            row=1, column=1, sticky="ew", pady=3)
+            row=1, column=1, columnspan=3, sticky="ew", pady=3)
         ttk.Label(editor, text="Nom du fichier, par exemple Rouvy.exe").grid(
-            row=2, column=1, sticky="w")
+            row=2, column=1, columnspan=3, sticky="w")
 
         self.action_vars = {}
-        ttk.Label(editor, text="Événement", font=("Segoe UI", 9, "bold")).grid(
-            row=3, column=0, sticky="w", pady=(12, 3))
-        ttk.Label(editor, text="Touche clavier (vide = aucune action)",
-                  font=("Segoe UI", 9, "bold")).grid(row=3, column=1, sticky="w", pady=(12, 3))
-        for row, (key, label) in enumerate(ACTION_FIELDS, start=4):
-            ttk.Label(editor, text=label).grid(row=row, column=0, sticky="w", pady=2)
+        for offset in ((0,) if compact else (0, 2)):
+            ttk.Label(editor, text="Événement", font=("Segoe UI", 9, "bold")).grid(
+                row=3, column=offset, sticky="w", pady=(12, 3))
+            ttk.Label(editor, text="Touche", font=("Segoe UI", 9, "bold")).grid(
+                row=3, column=offset + 1, sticky="w", pady=(12, 3))
+        split = len(ACTION_FIELDS) if compact else (len(ACTION_FIELDS) + 1) // 2
+        for index, (key, label) in enumerate(ACTION_FIELDS):
+            group = 0 if compact else index // split
+            row = 4 + index % split
+            column = group * 2
+            display_label = label
+            if compact:
+                display_label = (display_label.replace("Ride gauche —", "Ride G :")
+                                 .replace("Ride droite —", "Ride D :"))
+            ttk.Label(editor, text=display_label, width=22 if compact else 28).grid(
+                row=row, column=column, sticky="w", pady=2)
             var = tk.StringVar()
             self.action_vars[key] = var
-            ttk.Entry(editor, textvariable=var, width=14).grid(row=row, column=1, sticky="w", pady=2)
+            ttk.Entry(editor, textvariable=var, width=8).grid(
+                row=row, column=column + 1, sticky="ew", padx=(4, 8), pady=2)
 
         footer = ttk.Frame(body)
         footer.grid(row=1, column=0, columnspan=2, sticky="e", pady=(10, 0))
