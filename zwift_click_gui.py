@@ -4,6 +4,7 @@ import copy
 import ctypes
 import datetime
 import json
+import math
 import logging
 import os
 import queue
@@ -56,6 +57,161 @@ _mutex = None   # garde la référence du mutex d'instance unique
 logger = logging.getLogger("clickbridge")
 CONFIG_WRITE_BLOCKED = False
 CONFIG_LOAD_ERROR = None
+
+
+def _rounded_points(width, height, radius):
+    points = []
+    corners = ((radius, radius, 180), (width - radius, radius, 270),
+               (width - radius, height - radius, 0),
+               (radius, height - radius, 90))
+    for cx, cy, start in corners:
+        for step in range(7):
+            angle = math.radians(start + step * 15)
+            points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
+    return [coordinate for point in points for coordinate in point]
+
+
+class RoundedCard(tk.Frame):
+    """Frame with a rounded color surface, drawn behind its normal Tk children."""
+
+    def __init__(self, master, fill, **kwargs):
+        self.fill = fill
+        self.outer = master.cget("bg")
+        super().__init__(master, bg=self.outer, bd=0, highlightthickness=0, **kwargs)
+        self.surface = tk.Canvas(self, bg=self.outer, bd=0, highlightthickness=0)
+        self.surface.place(x=0, y=0, relwidth=1, relheight=1)
+        self.surface.bind("<Configure>", self._draw)
+
+    def _draw(self, _event=None):
+        self.surface.delete("surface")
+        width, height = self.surface.winfo_width(), self.surface.winfo_height()
+        if width > 2 and height > 2:
+            self.surface.create_polygon(*_rounded_points(width - 1, height - 1, 14),
+                                        fill=self.fill, outline=self.fill, tags="surface")
+
+
+class RoundedChoice(tk.Canvas):
+    """Compact rounded drop-down for the device and profile selectors."""
+
+    def __init__(self, master, variable, values, colors, width=176):
+        self.variable = variable
+        self.values = list(values)
+        self.colors = colors
+        self._width = width
+        self._hover = False
+        self._menu = None
+        super().__init__(master, width=width, height=34, bg=master.cget("bg"),
+                         bd=0, highlightthickness=0, takefocus=True)
+        self.bind("<Configure>", self._draw)
+        self.bind("<Button-1>", self._open_menu)
+        self.bind("<Enter>", self._set_hover)
+        self.bind("<Leave>", self._clear_hover)
+        self.bind("<KeyPress-Down>", self._move_selection)
+        self.bind("<KeyPress-Up>", self._move_selection)
+        self.variable.trace_add("write", lambda *_: self._draw())
+        self._draw()
+
+    def _draw(self, _event=None):
+        self.delete("all")
+        width, height = self.winfo_width(), self.winfo_height()
+        if width < 4 or height < 4:
+            return
+        border = self.colors["accent"] if self._hover or self.focus_get() == self else self.colors["border"]
+        self.create_polygon(*_rounded_points(width - 2, height - 2, 11),
+                            fill=self.colors["card2"], outline=border, width=1, tags="field")
+        self.create_text(14, height / 2, text=self.variable.get(), anchor="w",
+                         fill=self.colors["text"], font=("Segoe UI", 9), tags="value")
+        self.create_line(width - 20, height / 2 - 2, width - 15, height / 2 + 3,
+                         width - 10, height / 2 - 2, fill=self.colors["muted"],
+                         width=1.5, tags="arrow")
+
+    def configure(self, cnf=None, **kwargs):
+        values = kwargs.pop("values", None)
+        result = super().configure(cnf, **kwargs)
+        if values is not None:
+            self.values = list(values)
+            self._draw()
+        return result
+
+    config = configure
+
+    def get(self):
+        return self.variable.get()
+
+    def set(self, value):
+        self.variable.set(value)
+
+    def _set_hover(self, _event=None):
+        self._hover = True
+        self._draw()
+
+    def _clear_hover(self, _event=None):
+        self._hover = False
+        self._draw()
+
+    def _open_menu(self, _event=None):
+        self.focus_set()
+        self._menu = tk.Menu(self, tearoff=False, bg=self.colors["card2"], fg=self.colors["text"],
+                             activebackground=self.colors["accent"],
+                             activeforeground=self.colors["bg"], relief="flat", bd=0,
+                             font=("Segoe UI", 9))
+        for value in self.values:
+            self._menu.add_command(label=value, command=lambda item=value: self._select(item))
+        if self.values:
+            self._menu.tk_popup(self.winfo_rootx(), self.winfo_rooty() + self.winfo_height())
+        return "break"
+
+    def _select(self, value):
+        self.variable.set(value)
+        self.event_generate("<<ComboboxSelected>>")
+        self._draw()
+
+    def _move_selection(self, event):
+        if not self.values:
+            return "break"
+        try:
+            index = self.values.index(self.variable.get())
+        except ValueError:
+            index = 0
+        direction = 1 if event.keysym == "Down" else -1
+        self._select(self.values[(index + direction) % len(self.values)])
+        return "break"
+
+
+class RoundedControl(tk.Canvas):
+    """Rounded, low-overhead visual indicator used for device buttons."""
+
+    def __init__(self, master, text, colors, width, height, radius=12, **kwargs):
+        self.caption = text
+        self.colors = colors
+        self.fill = kwargs.pop("bg", colors["card2"])
+        self.foreground = kwargs.pop("fg", colors["text"])
+        self.font = kwargs.pop("font", ("Segoe UI", 11, "bold"))
+        self.radius = radius
+        kwargs.pop("state", None)
+        super().__init__(master, width=width, height=height, bg=master.cget("bg"),
+                         bd=0, highlightthickness=0, **kwargs)
+        self.bind("<Configure>", self._draw)
+        self._draw()
+
+    def _draw(self, _event=None):
+        self.delete("all")
+        width, height = self.winfo_width(), self.winfo_height()
+        if width > 3 and height > 3:
+            self.create_polygon(*_rounded_points(width - 2, height - 2, self.radius),
+                                fill=self.fill, outline="", tags="button")
+            self.create_text(width / 2, height / 2, text=self.caption,
+                             fill=self.foreground, font=self.font, tags="caption")
+
+    def configure(self, cnf=None, **kwargs):
+        self.fill = kwargs.pop("bg", kwargs.pop("background", self.fill))
+        self.foreground = kwargs.pop("fg", kwargs.pop("foreground", self.foreground))
+        kwargs.pop("state", None)
+        result = super().configure(cnf, **kwargs)
+        self._draw()
+        return result
+
+    config = configure
 
 RIDE_BUTTON_EVENTS = {
     EventType.RIDE_LEFT_DOWN: ("left", "LEFT", True, "ride_left"),
@@ -534,7 +690,7 @@ class Worker:
 
 
 class App:
-    COLORS = {"green": "#2ecc71", "orange": "#f5a623", "gray": "#aab4bd", "red": "#ff5c65"}
+    COLORS = {"green": "#34d399", "orange": "#fbbf24", "gray": "#a7b4c2", "red": "#fb7185"}
 
     def __init__(self, root):
         self.root = root
@@ -567,10 +723,10 @@ class App:
         self.battery_alerted = False
         self.ride_battery_alerted = {"left": False, "right": False}
 
-        self.colors = {"bg": "#101820", "card": "#1a2732", "card2": "#22323f",
-                       "text": "#f1f5f8", "muted": "#9aabb8", "accent": "#54d6a1",
-                       "green": "#2ecc71", "orange": "#f5a623", "gray": "#aab4bd",
-                       "red": "#ff5c65"}
+        self.colors = {"bg": "#0b1220", "card": "#111d2b", "card2": "#1b2b3b",
+                       "border": "#304254", "text": "#edf4fa", "muted": "#9aabba",
+                       "accent": "#4de0b2", "green": "#34d399", "orange": "#fbbf24",
+                       "gray": "#a7b4c2", "red": "#fb7185"}
         root.configure(bg=self.colors["bg"])
         screen_width = root.winfo_screenwidth()
         screen_height = root.winfo_screenheight()
@@ -588,12 +744,33 @@ class App:
         style.configure("TLabelframe", background=self.colors["bg"], foreground=self.colors["text"])
         style.configure("TLabelframe.Label", background=self.colors["bg"], foreground=self.colors["text"])
         style.configure("TCheckbutton", background=self.colors["bg"], foreground=self.colors["text"])
-        style.configure("TEntry", fieldbackground=self.colors["card2"], foreground=self.colors["text"])
-        style.configure("TSpinbox", fieldbackground=self.colors["card2"], foreground=self.colors["text"])
+        style.configure("TEntry", fieldbackground=self.colors["card2"], foreground=self.colors["text"],
+                        padding=(8, 5), bordercolor=self.colors["border"],
+                        lightcolor=self.colors["border"], darkcolor=self.colors["border"])
+        style.configure("TSpinbox", fieldbackground=self.colors["card2"], foreground=self.colors["text"],
+                        padding=(7, 4), bordercolor=self.colors["border"],
+                        lightcolor=self.colors["border"], darkcolor=self.colors["border"])
         style.configure("TCombobox", fieldbackground=self.colors["card2"],
-                        background=self.colors["card2"], foreground=self.colors["text"])
+                        background=self.colors["card2"], foreground=self.colors["text"],
+                        arrowcolor=self.colors["muted"], padding=(8, 5),
+                        bordercolor=self.colors["border"], lightcolor=self.colors["border"],
+                        darkcolor=self.colors["border"])
         style.configure("Dark.TCombobox", fieldbackground=self.colors["card2"],
-                        background=self.colors["card2"], foreground=self.colors["text"])
+                        background=self.colors["card2"], foreground=self.colors["text"],
+                        arrowcolor=self.colors["muted"], padding=(8, 5),
+                        bordercolor=self.colors["border"], lightcolor=self.colors["border"],
+                        darkcolor=self.colors["border"])
+        style.map("TCombobox", fieldbackground=[("readonly", self.colors["card2"])],
+                  selectbackground=[("readonly", self.colors["card2"])],
+                  selectforeground=[("readonly", self.colors["text"])])
+        style.configure("TButton", background=self.colors["card2"], foreground=self.colors["text"],
+                        padding=(11, 7), borderwidth=0, focusthickness=0)
+        style.map("TButton", background=[("active", self.colors["accent"]),
+                                         ("disabled", self.colors["card"])],
+                  foreground=[("active", self.colors["bg"])])
+        style.configure("TCheckbutton", padding=(3, 4), focuscolor=self.colors["accent"])
+        style.map("TCheckbutton", background=[("active", self.colors["card"])])
+        style.configure("TLabelframe", bordercolor=self.colors["border"], padding=7)
 
         self.is_active = False
         self.session_elapsed = 0.0
@@ -629,7 +806,7 @@ class App:
         tk.Label(header, text="Click Bridge", bg=self.colors["bg"], fg=self.colors["text"],
                  font=("Segoe UI", 18, "bold")).pack(side="left")
 
-        hero = tk.Frame(main, bg=self.colors["card"], padx=12, pady=7)
+        hero = RoundedCard(main, self.colors["card"], padx=12, pady=7)
         hero.pack(fill="x", pady=(8, 8))
         status_row = tk.Frame(hero, bg=self.colors["card"])
         status_row.pack()
@@ -647,10 +824,9 @@ class App:
         tk.Label(selector_row, text="Équipement", bg=self.colors["card"],
                  fg=self.colors["muted"], font=("Segoe UI", 9)).pack(side="left")
         self.device_selector_var = tk.StringVar(value=self.selected_device)
-        self.device_selector = ttk.Combobox(
-            selector_row, textvariable=self.device_selector_var,
-            values=("Zwift Click V1", "Zwift Ride"),
-            state="readonly", width=24, style="Dark.TCombobox")
+        self.device_selector = RoundedChoice(
+            selector_row, self.device_selector_var,
+            ("Zwift Click V1", "Zwift Ride"), self.colors, width=178)
         self.device_selector.pack(side="right")
         self.device_selector.bind("<<ComboboxSelected>>", self.select_device)
 
@@ -669,19 +845,15 @@ class App:
         self.battery.pack()
         click_buttons = tk.Frame(self.click_panel, bg=self.colors["card"])
         click_buttons.pack(pady=(8, 6))
-        self.plus_button = tk.Button(click_buttons, text="+", width=7, height=1, relief="flat",
-                                     bg=self.colors["card2"], fg=self.colors["text"],
-                                     activebackground=self.colors["accent"],
-                                     activeforeground=self.colors["bg"],
-                                     disabledforeground=self.colors["text"],
-                                     font=("Segoe UI", 17, "bold"), state="disabled")
+        self.plus_button = RoundedControl(click_buttons, "+", self.colors, 104, 74,
+                                          radius=14, bg=self.colors["card2"],
+                                          fg=self.colors["text"],
+                                          font=("Segoe UI", 19, "bold"), state="disabled")
         self.plus_button.pack(side="left", padx=18)
-        self.minus_button = tk.Button(click_buttons, text="−", width=7, height=1, relief="flat",
-                                      bg=self.colors["card2"], fg=self.colors["text"],
-                                      activebackground=self.colors["accent"],
-                                      activeforeground=self.colors["bg"],
-                                      disabledforeground=self.colors["text"],
-                                      font=("Segoe UI", 17, "bold"), state="disabled")
+        self.minus_button = RoundedControl(click_buttons, "−", self.colors, 104, 74,
+                                           radius=14, bg=self.colors["card2"],
+                                           fg=self.colors["text"],
+                                           font=("Segoe UI", 19, "bold"), state="disabled")
         self.minus_button.pack(side="left", padx=18)
         self.last = tk.Label(self.click_panel, text="Dernière action : –",
                              bg=self.colors["card"], fg=self.colors["muted"],
@@ -715,7 +887,7 @@ class App:
         self.click_button_states = {"plus": False, "minus": False}
         self.ride_battery_alerted = {"left": False, "right": False}
         for column, side in enumerate(("left", "right")):
-            side_panel = tk.Frame(ride_sides, bg=self.colors["card2"], padx=6, pady=3)
+            side_panel = RoundedCard(ride_sides, self.colors["card2"], padx=6, pady=3)
             side_panel.grid(row=0, column=column, sticky="nsew",
                             padx=(0, 4) if column == 0 else (4, 0))
             ride_sides.columnconfigure(column, weight=1)
@@ -742,16 +914,15 @@ class App:
             self.render_ride_buttons(side)
         self.click_panel.pack(fill="x")
 
-        profile_card = tk.Frame(main, bg=self.colors["card"], padx=10, pady=6)
+        profile_card = RoundedCard(main, self.colors["card"], padx=10, pady=6)
         profile_card.pack(fill="x", pady=(0, 7))
         profile_head = tk.Frame(profile_card, bg=self.colors["card"])
         profile_head.pack(fill="x")
         tk.Label(profile_head, text="Profil actif", bg=self.colors["card"], fg=self.colors["muted"],
                  font=("Segoe UI", 9)).pack(side="left")
         self.active_profile_var = tk.StringVar(value=self.shared["active_profile"])
-        self.active_profile_combo = ttk.Combobox(
-            profile_head, textvariable=self.active_profile_var, state="readonly", width=22,
-            style="Dark.TCombobox")
+        self.active_profile_combo = RoundedChoice(
+            profile_head, self.active_profile_var, [], self.colors, width=168)
         self.active_profile_combo.pack(side="right")
         self.active_profile_combo.bind("<<ComboboxSelected>>", self.active_profile_changed)
         default_row = tk.Frame(profile_card, bg=self.colors["card"])
@@ -759,9 +930,8 @@ class App:
         tk.Label(default_row, text="Par défaut", bg=self.colors["card"], fg=self.colors["muted"],
                  font=("Segoe UI", 9)).pack(side="left")
         self.default_profile_var = tk.StringVar(value=self.shared["default_profile"])
-        self.default_profile_combo = ttk.Combobox(
-            default_row, textvariable=self.default_profile_var, state="readonly", width=22,
-            style="Dark.TCombobox")
+        self.default_profile_combo = RoundedChoice(
+            default_row, self.default_profile_var, [], self.colors, width=168)
         self.default_profile_combo.pack(side="right")
         self.default_profile_combo.bind("<<ComboboxSelected>>", self.default_profile_changed)
         self.profile_status = tk.Label(profile_card, text="Profil par défaut", bg=self.colors["card"],
@@ -774,7 +944,7 @@ class App:
         self.refresh_profile_controls()
         self.active_profile_changed()
 
-        stats = tk.Frame(main, bg=self.colors["card"], padx=12, pady=8)
+        stats = RoundedCard(main, self.colors["card"], padx=12, pady=8)
         stats.pack(fill="x")
         stats_header = tk.Frame(stats, bg=self.colors["card"])
         stats_header.grid(row=0, column=0, columnspan=4, sticky="ew", pady=(0, 3))
@@ -1552,9 +1722,12 @@ class App:
             body.pack(fill="both", expand=True)
             style = ttk.Style(self.history_window)
             style.configure("History.Treeview", background=self.colors["card"],
-                            foreground=self.colors["text"], fieldbackground=self.colors["card"])
+                            foreground=self.colors["text"], fieldbackground=self.colors["card"],
+                            rowheight=30, borderwidth=0)
             style.configure("History.Treeview.Heading", background=self.colors["card2"],
-                            foreground=self.colors["text"])
+                            foreground=self.colors["text"], padding=(9, 7), relief="flat")
+            style.map("History.Treeview", background=[("selected", self.colors["accent"])],
+                      foreground=[("selected", self.colors["bg"])])
             self.history_table = ttk.Treeview(
                 body, columns=("date", "profile", "duration", "changes", "ride"),
                 show="headings", style="History.Treeview")
@@ -1648,8 +1821,9 @@ class App:
         }
         for name, row, column, caption in layouts[side]:
             active = self.ride_button_values.get((side, name), False)
-            label = tk.Label(
-                frame, text=caption, padx=4, pady=2,
+            label = RoundedControl(
+                frame, caption, self.colors, width=82 if side == "left" else 92,
+                height=29, radius=8,
                 bg=self.COLORS["green"] if active else self.colors["card"],
                 fg=self.colors["bg"] if active else self.colors["text"],
                 font=("Segoe UI", 9, "bold"))

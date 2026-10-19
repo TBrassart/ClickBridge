@@ -8,7 +8,7 @@ La prise en charge du Zwift Ride est expérimentale : elle s’appuie sur des ca
 
 ## Télécharger
 
-**[Télécharger ClickBridge v1.0.6 pour Windows](https://github.com/TBrassart/ClickBridge/releases/latest/download/ClickBridge-Setup.exe)**
+**[Télécharger ClickBridge v1.0.7 pour Windows](https://github.com/TBrassart/ClickBridge/releases/latest/download/ClickBridge-Setup.exe)**
 
 La version publiée et son manifeste SHA-256 se trouvent sur la [page des releases](https://github.com/TBrassart/ClickBridge/releases). ClickBridge est actuellement distribué sans certificat de signature éditeur. Windows SmartScreen peut donc afficher un avertissement indiquant que l’éditeur est inconnu. Pour vérifier le fichier, télécharge aussi `SHA256SUMS.txt` depuis la même release et compare l’empreinte :
 
@@ -50,8 +50,8 @@ Vérifie que l’installation est terminée, puis lance ClickBridge depuis le me
 
 Les signalements se font dans les [GitHub Issues](https://github.com/TBrassart/ClickBridge/issues/new/choose). Ils sont publics : n’y publie pas de mot de passe, adresse personnelle, configuration complète ou autre donnée privée. Le formulaire demande la version de ClickBridge, la version de Windows, les étapes et le résultat observé.
 
-Pour savoir comment exporter et vérifier un diagnostic avant de le joindre, consulte [Aide et diagnostic](SUPPORT.md).
+Pour savoir comment exporter et vérifier un diagnostic avant de le joindre, consulte [Aide et dépannage](SUPPORT.md). Pour vérifier une nouvelle version étape par étape, suis la [checklist de validation](VALIDATION.md).
 
 ## État du projet
 
-La release actuelle est **v1.0.6**. Elle ajuste la fenêtre principale pour que les contrôles et statistiques restent visibles quand le Zwift Ride est sélectionné. Elle conserve les corrections de mise à jour et l’affichage groupé des deux unités Ride. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et diagnostic](SUPPORT.md).
+La release actuelle est **v1.0.7**. Elle modernise l’interface avec des sélecteurs et panneaux arrondis, et ajoute une checklist de validation ainsi que de nouvelles solutions de dépannage. Elle conserve les corrections de mise à jour et l’affichage groupé des deux unités Ride. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et dépannage](SUPPORT.md).
