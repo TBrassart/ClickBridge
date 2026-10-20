@@ -1,6 +1,6 @@
 {
-  "name": "MyWhoosh",
-  "application": "MyWhoosh.exe",
+  "name": "BullWatt",
+  "application": "Chrome.exe",
   "actions": {
     "plus_down": "up",
     "minus_down": "down",
