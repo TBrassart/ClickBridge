@@ -2,8 +2,10 @@
   "name": "MyWhoosh",
   "application": "MyWhoosh.exe",
   "actions": {
-    "plus_down": "k",
-    "minus_down": "i",
+    "ride_shift_up_l": "k",
+    "ride_shift_dn_l": "i",
+    "ride_shift_up_r": "k",
+    "ride_shift_dn_r": "i",
     "ride_left": "a",
     "ride_right": "d",
     "ride_up": "1",
