@@ -3,6 +3,6 @@
   "application": "Chrome.exe",
   "actions": {
     "plus_down": "up",
-    "minus_down": "down",
+    "minus_down": "down"
   }
 }
