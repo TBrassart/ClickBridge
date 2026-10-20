@@ -1,3 +1,6 @@
+{
+  "name": "MyWhoosh",
+  "application": "MyWhoosh.exe",
   "actions": {
     "plus_down": "up",
     "minus_down": "down",
