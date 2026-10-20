@@ -1,0 +1,16 @@
+{
+  "name": "Roovy",
+  "application": "Roovy.exe",
+  "actions": {
+    "plus_down": ".",
+    "minus_down": ",",
+    "ride_left": "",
+    "ride_right": "",
+    "ride_up": "",
+    "ride_down": "",
+    "ride_a": "enter",
+    "ride_b": "space",
+    "ride_y": "s", 
+    "ride_z": "k"
+  }
+}
