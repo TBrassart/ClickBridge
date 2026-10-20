@@ -1,0 +1,18 @@
+{
+  "name": "TrainerRoad",
+  "application": "TrainerRoad.exe",
+  "actions": {
+    "ride_shift_up_l": "up",
+    "ride_shift_dn_l": "down",
+    "ride_shift_up_r": "up",
+    "ride_shift_dn_r": "down",
+    "ride_left": "left",
+    "ride_right": "right",
+    "ride_up": "up",
+    "ride_down": "down",
+    "ride_a": "w",
+    "ride_b": "space",
+    "ride_y": "h", 
+    "ride_z": "t"
+  }
+}
