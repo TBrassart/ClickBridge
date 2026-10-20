@@ -1,0 +1,10 @@
+{
+  "name": "BullWatt",
+  "application": "Chrome.exe",
+  "actions": {
+    "ride_shift_up_l": "up",
+    "ride_shift_dn_l": "down",
+    "ride_shift_up_r": "up",
+    "ride_shift_dn_r": "down"
+  }
+}
