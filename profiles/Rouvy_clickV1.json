@@ -1,0 +1,8 @@
+{
+  "name": "Roovy",
+  "application": "Roovy.exe",
+  "actions": {
+    "plus_down": ".",
+    "minus_down": ","
+  }
+}
