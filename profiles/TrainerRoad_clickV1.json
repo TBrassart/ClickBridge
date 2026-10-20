@@ -1,0 +1,8 @@
+{
+  "name": "TrainerRoad",
+  "application": "TrainerRoad.exe",
+  "actions": {
+    "plus_down": "up",
+    "minus_down": "down"
+  }
+}
