@@ -1,6 +1,6 @@
 {
-  "name": "Roovy",
-  "application": "Roovy.exe",
+  "name": "Rouvy",
+  "application": "Rouvy.exe",
   "actions": {
     "plus_down": ".",
     "minus_down": ","
