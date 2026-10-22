@@ -135,6 +135,6 @@ La collecte et l'export automatiques d'un diagnostic ne doivent pas être confon
 
 ## Voir aussi
 
-- [Dépannage](TROUBLESHOOTING.md)
+- [Dépannage](SUPPORT.md)
 - [Installation](INSTALLATION.md)
 - [Signature de code et SmartScreen](SMARTSCREEN.md)
