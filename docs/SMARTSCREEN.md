@@ -80,5 +80,5 @@ Télécharge une nouvelle copie depuis les [releases officielles ClickBridge](ht
 ## Voir aussi
 
 - [Installation et première connexion](INSTALLATION.md)
-- [Dépannage](TROUBLESHOOTING.md)
+- [Dépannage](SUPPORT.md)
 - [Dépôt officiel ClickBridge](https://github.com/TBrassart/ClickBridge)
