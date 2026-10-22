@@ -120,5 +120,5 @@ Si tu possèdes un export antérieur, importe-le après avoir conservé une copi
 ## Voir aussi
 
 - [Comprendre les périphériques, composants et profils](CONCEPTS.md)
-- [Dépannage](TROUBLESHOOTING.md)
+- [Dépannage](SUPPORT.md)
 - [Installation](INSTALLATION.md)
