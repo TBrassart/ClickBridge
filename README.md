@@ -50,8 +50,16 @@ Vérifie que l’installation est terminée, puis lance ClickBridge depuis le me
 
 Les signalements se font dans les [GitHub Issues](https://github.com/TBrassart/ClickBridge/issues/new/choose). Ils sont publics : n’y publie pas de mot de passe, adresse personnelle, configuration complète ou autre donnée privée. Le formulaire demande la version de ClickBridge, la version de Windows, les étapes et le résultat observé.
 
-Pour savoir comment exporter et vérifier un diagnostic avant de le joindre, consulte [Aide et dépannage](SUPPORT.md). Pour vérifier une nouvelle version étape par étape, suis la [checklist de validation](VALIDATION.md).
+Pour savoir comment exporter et vérifier un diagnostic avant de le joindre, consulte [Aide et dépannage](docs/SUPPORT.md). Pour vérifier une nouvelle version étape par étape, suis la [checklist de validation](VALIDATION.md).
 
 ## État du projet
 
 La release actuelle est **v1.0.7.1**. Elle affine l’interface Windows d’après les écrans Android de ClickBridge et permet au mécanisme de mise à jour de reconnaître les versions à quatre composantes. Elle comprend aussi une checklist de validation et une aide au dépannage enrichie. Pour les problèmes, les demandes et les informations de confidentialité, consulte [Aide et dépannage](SUPPORT.md).
+
+## Autres documentations
+
+[Pour comprendre les différents concepts de ClickBridge](docs/CONCEPTS.md)
+[Pour générer et transmettre un diagnostic suite à un problème](docs/DAGNOSTICS.md)
+[Pour comprendre comment installer ClickBridge](docs/INSTALLATION.md)
+[Pour passer les blocages scmartscreen de windows pendant l'installation](SMARTSCREEN.md)
+[Pour tout savoir sur les profils](docs/PROFILES.md)
