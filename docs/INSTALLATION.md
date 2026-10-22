@@ -58,7 +58,7 @@ Vérifie les points suivants :
 - La commande physique déclenche l'action clavier attendue.
 - Le résultat est correct dans l'application cible.
 
-Si une commande ne fonctionne pas, consulte le [guide de dépannage](TROUBLESHOOTING.md).
+Si une commande ne fonctionne pas, consulte le [guide de dépannage](SUPPORT.md).
 
 ## 6. Retrouver ClickBridge après le démarrage
 
