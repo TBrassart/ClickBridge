@@ -98,4 +98,4 @@ Si une commande ne fonctionne pas, cette distinction aide à déterminer si le p
 
 - [Installation et première connexion](INSTALLATION.md)
 - [Créer et gérer des profils](PROFILES.md)
-- [Dépannage](TROUBLESHOOTING.md)
+- [Dépannage](SUPPORT.md)
