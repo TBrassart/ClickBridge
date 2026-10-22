@@ -59,7 +59,11 @@ La release actuelle est **v1.0.7.1**. Elle affine l’interface Windows d’apr�
 ## Autres documentations
 
 [Pour comprendre les différents concepts de ClickBridge](docs/CONCEPTS.md)
+
 [Pour générer et transmettre un diagnostic suite à un problème](docs/DAGNOSTICS.md)
+
 [Pour comprendre comment installer ClickBridge](docs/INSTALLATION.md)
+
 [Pour passer les blocages scmartscreen de windows pendant l'installation](SMARTSCREEN.md)
+
 [Pour tout savoir sur les profils](docs/PROFILES.md)
